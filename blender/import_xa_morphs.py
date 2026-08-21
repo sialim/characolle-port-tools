@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--morph-json", type=Path, required=True, help="Output from xa_morph_extract.py")
     parser.add_argument("--output", type=Path, required=True, help="Output Blender file")
     parser.add_argument("--mesh", action="append", help="XX mesh name; repeat for multiple meshes")
+    parser.add_argument("--textures", type=Path, help="Directory containing exported texture files")
     parser.add_argument("--clip", action="append", help="Morph clip name; repeat for multiple clips")
     parser.add_argument("--scale", type=float, default=1.0)
     return parser.parse_args(argv)
@@ -32,6 +33,30 @@ def find_mesh(mesh_name: str) -> bpy.types.Object:
         raise RuntimeError(f"Could not find imported mesh for {mesh_name}")
     candidates.sort(key=lambda obj: (len(obj.data.vertices), obj.name))
     return candidates[-1]
+
+
+def relink_images(root: Path | None) -> int:
+    if root is None or not root.exists():
+        return 0
+    files = {
+        path.name.casefold(): path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".bmp", ".tga", ".png", ".jpg", ".dds"}
+    }
+    linked = 0
+    for image in bpy.data.images:
+        candidates = [image.name]
+        if "." in image.name:
+            stem, suffix = image.name.rsplit(".", 1)
+            if suffix.isdigit():
+                candidates.append(stem)
+        texture = next((files.get(candidate.casefold()) for candidate in candidates if files.get(candidate.casefold())), None)
+        if texture is None:
+            continue
+        image.filepath = str(texture)
+        image.reload()
+        linked += 1
+    return linked
 
 
 def add_clip_shape_keys(obj: bpy.types.Object, data: dict, clip_name: str) -> int:
@@ -83,6 +108,7 @@ def main() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=str(args.input), automatic_bone_orientation=False)
     data = json.loads(args.morph_json.read_text(encoding="utf-8"))
+    linked_textures = relink_images(args.textures)
     mesh_names = args.mesh or sorted({clip["mesh"] for clip in data["clips"]})
     created = 0
     processed = []
@@ -102,7 +128,10 @@ def main() -> None:
         processed.extend(f"{mesh_name}:{clip}" for clip in clips)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
-    print(f"Added {created} shape keys across {len(processed)} clip export(s); saved {args.output}")
+    print(
+        f"Added {created} shape keys across {len(processed)} clip export(s); "
+        f"relinked {linked_textures} texture(s); saved {args.output}"
+    )
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ Morph conversion example:
 
 ```text
 python tools/xa_morph_extract.py --input C:\exports\Kud\c02_01_10.xa --output C:\exports\Kud\c02_01_10.morphs.json
-blender --background --python blender/import_xa_morphs.py -- --input C:\exports\Kud\Kud_face.fbx --morph-json C:\exports\Kud\c02_01_10.morphs.json --output C:\blends\Kud_face_with_morphs.blend --mesh P_face --clip Face_top --clip Face_bottom
+blender --background --python blender/import_xa_morphs.py -- --input C:\exports\Kud\Kud_head.fbx --morph-json C:\exports\Kud\c02_01_10.morphs.json --textures C:\exports\Kud\textures --output C:\blends\Kud_head_with_morphs.blend
 ```
 
 6. Test the imported face keys in Blender. Preserve the original skeleton in
