@@ -51,7 +51,8 @@ def add_clip_shape_keys(obj: bpy.types.Object, data: dict, clip_name: str) -> in
         )
 
     if obj.data.shape_keys is None:
-        obj.shape_key_add(name="Basis", from_mix=False)
+        basis = obj.shape_key_add(name="Basis", from_mix=False)
+        basis.value = 1.0
 
     seen: set[str] = set()
     created = 0
@@ -70,6 +71,7 @@ def add_clip_shape_keys(obj: bpy.types.Object, data: dict, clip_name: str) -> in
             )
 
         shape = obj.shape_key_add(name=f"{clip_name}__{keyframe_name}", from_mix=False)
+        shape.value = 0.0
         for mesh_index, morph_index in zip(index_set["mesh_indices"], index_set["morph_indices"]):
             shape.data[mesh_index].co = keyframe["positions"][morph_index]
         created += 1
