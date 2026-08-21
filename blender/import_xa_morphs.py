@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, required=True, help="Base FBX file")
     parser.add_argument("--morph-json", type=Path, required=True, help="Output from xa_morph_extract.py")
     parser.add_argument("--output", type=Path, required=True, help="Output Blender file")
-    parser.add_argument("--mesh", required=True, help="XX mesh name, such as P_face")
+    parser.add_argument("--mesh", action="append", help="XX mesh name; repeat for multiple meshes")
     parser.add_argument("--clip", action="append", help="Morph clip name; repeat for multiple clips")
     parser.add_argument("--scale", type=float, default=1.0)
     return parser.parse_args(argv)
@@ -80,18 +80,27 @@ def main() -> None:
     args = parse_args()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=str(args.input), automatic_bone_orientation=False)
-    target = find_mesh(args.mesh)
-    if args.scale != 1.0:
-        target.scale *= args.scale
-
     data = json.loads(args.morph_json.read_text(encoding="utf-8"))
-    clips = args.clip or [clip["name"] for clip in data["clips"] if clip["mesh"] == args.mesh]
-    created = sum(add_clip_shape_keys(target, data, clip) for clip in clips)
-    target["characolle_morph_source"] = str(args.morph_json)
-    target["characolle_morph_clips"] = clips
+    mesh_names = args.mesh or sorted({clip["mesh"] for clip in data["clips"]})
+    created = 0
+    processed = []
+    for mesh_name in mesh_names:
+        target = find_mesh(mesh_name)
+        if args.scale != 1.0:
+            target.scale *= args.scale
+        clips = [
+            clip["name"]
+            for clip in data["clips"]
+            if clip["mesh"] == mesh_name and (not args.clip or clip["name"] in args.clip)
+        ]
+        for clip in clips:
+            created += add_clip_shape_keys(target, data, clip)
+        target["characolle_morph_source"] = str(args.morph_json)
+        target["characolle_morph_clips"] = clips
+        processed.extend(f"{mesh_name}:{clip}" for clip in clips)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
-    print(f"Added {created} shape keys to {target.name}; saved {args.output}")
+    print(f"Added {created} shape keys across {len(processed)} clip export(s); saved {args.output}")
 
 
 if __name__ == "__main__":
