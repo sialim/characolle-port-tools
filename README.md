@@ -20,15 +20,16 @@ accessory `.xx` files, and extracted texture/previews.
 ## Workflow
 
 1. Extract the game's `.pp` packages with a CharaColle-compatible extractor.
-2. Open the relevant `.xx` files in the custom CharaColle SB3Utility 0.9.9
-   build. For face posing, start with the head `.xx` files and open the
-   matching head `.xa` files before exporting. The bundled tool notes say
-   opened `.xa` animation data is added to supported exports, and its
-   changelog confirms FBX morph import/export.
-3. Select the parent mesh/root when exporting. Selecting a child node can
-   crash morph export in this build.
-4. Run `tools/catalog_extraction.py` to produce a machine-readable inventory.
-5. Run `blender/import_characolle_fbx.py` inside Blender to import FBX files,
+2. Open the relevant `.xx` files in SB3Utility and export a geometry-only FBX.
+   The CharaColle XA morph exporter can fail on valid facial clips, so do not
+   rely on the combined XA-to-FBX export for face posing.
+3. Run `tools/xa_morph_extract.py` against the matching `.xa` file. It reads
+   the morph index sets, keyframes, clips, and references without modifying
+   the source game files.
+4. Run `blender/import_xa_morphs.py` to import the geometry-only FBX and apply
+   the extracted XA positions as Blender shape keys.
+5. Run `tools/catalog_extraction.py` to produce a machine-readable inventory.
+6. Run `blender/import_characolle_fbx.py` inside Blender to import FBX files,
    relink extracted textures, normalize scene units, and save a `.blend`.
    The importer records the number of non-basis shape keys and can write a
    JSON report with `--shape-key-report`.
@@ -41,6 +42,13 @@ blender --background --python blender/import_characolle_fbx.py -- --input C:\exp
 
 An existing `.blend` can be checked later with
 `blender/audit_shape_keys.py`.
+
+Morph conversion example:
+
+```text
+python tools/xa_morph_extract.py --input C:\exports\Kud\c02_01_10.xa --output C:\exports\Kud\c02_01_10.morphs.json
+blender --background --python blender/import_xa_morphs.py -- --input C:\exports\Kud\Kud_face.fbx --morph-json C:\exports\Kud\c02_01_10.morphs.json --output C:\blends\Kud_face_with_morphs.blend --mesh P_face --clip Face_top --clip Face_bottom
+```
 
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
