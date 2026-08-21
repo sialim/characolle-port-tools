@@ -48,7 +48,11 @@ Morph conversion example:
 ```text
 python tools/xa_morph_extract.py --input C:\exports\Kud\c02_01_10.xa --output C:\exports\Kud\c02_01_10.morphs.json
 blender --background --python blender/import_xa_morphs.py -- --input C:\exports\Kud\Kud_head.fbx --morph-json C:\exports\Kud\c02_01_10.morphs.json --textures C:\exports\Kud\textures --output C:\blends\Kud_head_with_morphs.blend
+blender --background --python blender/link_face_pose_keys.py -- --input C:\blends\Kud_head_with_morphs.blend --output C:\blends\Kud_head_with_morphs.blend
 ```
+
+The face-pose linker drives matching `P_namida` tear/eyelash keys from the
+corresponding `P_face` expression keys without merging the two skinned meshes.
 
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.

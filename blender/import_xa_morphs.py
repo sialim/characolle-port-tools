@@ -44,7 +44,7 @@ def relink_images(root: Path | None) -> int:
         if path.is_file() and path.suffix.lower() in {".bmp", ".tga", ".png", ".jpg", ".dds"}
     }
     linked = 0
-    for image in bpy.data.images:
+    for image in list(bpy.data.images):
         candidates = [image.name]
         if "." in image.name:
             stem, suffix = image.name.rsplit(".", 1)
@@ -53,8 +53,15 @@ def relink_images(root: Path | None) -> int:
         texture = next((files.get(candidate.casefold()) for candidate in candidates if files.get(candidate.casefold())), None)
         if texture is None:
             continue
+        loaded = bpy.data.images.load(str(texture), check_existing=False)
+        loaded.pack()
+        for material in bpy.data.materials:
+            if not material.use_nodes:
+                continue
+            for node in material.node_tree.nodes:
+                if node.type == "TEX_IMAGE" and node.image == image:
+                    node.image = loaded
         image.filepath = str(texture)
-        image.reload()
         linked += 1
     return linked
 
