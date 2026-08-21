@@ -1,0 +1,29 @@
+# Local extraction and conversion output
+_work/
+source/
+exports/
+textures/
+*.pp
+*.xx
+*.xa
+*.xl
+*.bmp
+*.tga
+*.dds
+*.fbx
+*.obj
+*.pmx
+*.blend
+*.blend1
+*.smd
+*.dmx
+*.mdl
+
+# Local Python/Blender state
+__pycache__/
+*.py[cod]
+.venv/
+
+# Operating-system files
+Thumbs.db
+.DS_Store
