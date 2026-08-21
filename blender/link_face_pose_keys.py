@@ -30,8 +30,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
-    face = bpy.data.objects.get("P_face_0")
-    namida = bpy.data.objects.get("P_namida_0")
+    face = bpy.data.objects.get("P_face") or bpy.data.objects.get("P_face_0")
+    namida = bpy.data.objects.get("P_namida") or bpy.data.objects.get("P_namida_0")
     if face is None or namida is None or face.data.shape_keys is None or namida.data.shape_keys is None:
         raise RuntimeError("Expected P_face_0 and P_namida_0 shape-key meshes")
 

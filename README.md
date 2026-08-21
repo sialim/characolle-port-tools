@@ -51,6 +51,16 @@ blender --background --python blender/import_xa_morphs.py -- --input C:\exports\
 blender --background --python blender/link_face_pose_keys.py -- --input C:\blends\Kud_head_with_morphs.blend --output C:\blends\Kud_head_with_morphs.blend
 ```
 
+To make the imported head easier to inspect in Blender, normalize the FBX
+parent/mesh names and rebuild the material texture nodes:
+
+```text
+blender --background --python blender/normalize_head_scene.py -- --input C:\blends\Kud_head_with_morphs.blend --output C:\blends\Kud_head_with_morphs_fixed.blend
+```
+
+This produces `P_face` and `P_namida` mesh objects in the `CHARACTER_HEAD`
+collection. Their original FBX empty parents are retained in `HEAD_RIG`.
+
 The face-pose linker drives matching `P_namida` tear/eyelash keys from the
 corresponding `P_face` expression keys without merging the two skinned meshes.
 
