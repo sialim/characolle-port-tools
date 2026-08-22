@@ -119,6 +119,14 @@ reassigned to it, missing outfit-specific bones are copied into it, and the
 head armature is parented to `o01_J_Head`. The original outfit rigs are kept
 in a hidden `SOURCE_BODY_RIGS` collection.
 
+The final scene therefore has two active armatures by design. Select
+`BODY_02__SCENE_ROOT.001` in `SHARED_BODY_RIG` and enter Pose Mode for body
+controls such as `o01_J_Neck` and `o01_J_Head`. Select `o_N_kao_all` in
+`HEAD_RIG` and enter Pose Mode for face controls, including `eye_L` and
+`eye_R`; the face armature is parented to the body rig's `o01_J_Head` bone.
+Meshes with valid vertex groups but no imported armature modifier can be
+rebound with `blender/attach_skinned_mesh.py`.
+
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
 7. Clean the rig and materials in Blender.
