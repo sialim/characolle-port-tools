@@ -40,6 +40,9 @@ def main() -> None:
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
     layers = {layer: get_collection(f"BODY_LAYER_{layer}") for layer in ("00", "01", "02")}
     rigs = {layer: get_collection(f"BODY_RIG_{layer}") for layer in ("00", "01", "02")}
+    base = get_collection("BODY_BASE")
+    base.hide_viewport = False
+    base.hide_render = False
     candidates = get_collection("GMOD_BODYGROUP_CANDIDATES")
     candidates.hide_viewport = False
     candidates.hide_render = False
@@ -73,7 +76,19 @@ def main() -> None:
             if candidates.objects.get(obj.name) is None:
                 candidates.objects.link(obj)
 
+    base_names = {
+        "BODY_02__P_body_0",
+        "BODY_02__P_body_2",
+        "BODY_02__P_nip_0",
+    }
+    for name in base_names:
+        obj = bpy.data.objects.get(name)
+        if obj is not None:
+            move_to_collection(obj, base)
+            obj["characolle_role"] = "base_body"
+
     candidates["characolle_role"] = "candidate_bodygroups"
+    base["characolle_role"] = "always_available_base_body"
     bpy.context.scene["characolle_visible_body_layer"] = args.visible_layer
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))

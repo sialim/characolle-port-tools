@@ -78,6 +78,12 @@ c02_01_02_00.xx  swimsuit/base-body layer, including P_body and P_bura
 an `.xx` file. Keep outfit layers separate until the shared skeleton and
 GMod bodygroup assignments are finalized.
 
+The organized Blender scene keeps the permanent base pieces in `BODY_BASE`
+and leaves outfit geometry in `BODY_LAYER_00`, `BODY_LAYER_01`, and
+`BODY_LAYER_02`. This avoids carrying duplicate body vertices into the final
+bodygroup setup; clothing can be fitted against `BODY_BASE` and then cleaned
+as separate release meshes.
+
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
 7. Clean the rig and materials in Blender.
