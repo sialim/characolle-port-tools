@@ -99,6 +99,18 @@ morph. `blender/restore_hair_overlays.py` can restore the original
 `*_hair_sel_00.bmp` or `*_hair_sell_00.bmp` material overlay when a cleaned
 scene needs it.
 
+To put the head and outfit layers on one usable skeleton, run the body-rig
+unifier after the eye-control step:
+
+```text
+blender --background --python blender/unify_body_rig.py -- --input C:\blends\Kud_full_body_layers_eye_controls.blend --output C:\blends\Kud_full_body_layers_unified.blend
+```
+
+The layer 02 body rig becomes `SHARED_BODY_RIG`, outfit armature modifiers are
+reassigned to it, missing outfit-specific bones are copied into it, and the
+head armature is parented to `o01_J_Head`. The original outfit rigs are kept
+in a hidden `SOURCE_BODY_RIGS` collection.
+
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
 7. Clean the rig and materials in Blender.
