@@ -35,7 +35,7 @@ def main() -> None:
     args = parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     character = manifest["character"].lower()
-    model_name = args.model_name or f"characolle/{character}"
+    model_name = args.model_name or manifest.get("model_name") or f"characolle/{character}"
     material_path = args.material_path.replace("\\", "/").strip("/")
 
     lines = [

@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", choices=("DMX", "SMD"), default="DMX")
     parser.add_argument("--max-influences", type=int, default=3)
     parser.add_argument("--keep-mantle-bones", action="store_true")
+    parser.add_argument("--canonical-layer", choices=("00", "01", "02", "03", "04"))
     return parser.parse_args(argv)
 
 
@@ -67,8 +68,19 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
     return len(missing)
 
 
-def prepare_single_armature() -> dict:
-    canonical = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
+def prepare_single_armature(canonical_layer: str | None = None) -> dict:
+    canonical = None
+    if canonical_layer:
+        canonical = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(f"BODY_{canonical_layer}__")
+            ),
+            None,
+        )
+    if canonical is None:
+        canonical = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if canonical is None:
         preferred = bpy.context.scene.get("characolle_canonical_body_layer", "02")
         canonical = next(
@@ -271,7 +283,7 @@ def main() -> None:
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     register_source_tools(args.source_tools)
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
-    staging = prepare_single_armature()
+    staging = prepare_single_armature(args.canonical_layer)
     if not args.keep_mantle_bones:
         staging.update(simplify_mantle_bones())
     staging["pruned_vertices"] = prune_weights(args.max_influences)

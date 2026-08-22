@@ -17,6 +17,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--character", required=True)
+    parser.add_argument("--base-layer", choices=("00", "01", "02", "03", "04"))
+    parser.add_argument("--canonical-layer", choices=("00", "01", "02", "03", "04"))
     return parser.parse_args(argv)
 
 
@@ -82,7 +84,18 @@ def collection_meshes(collection: bpy.types.Collection) -> list[dict]:
 def main() -> None:
     args = parse_args()
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
-    armature = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
+    armature = None
+    if args.canonical_layer:
+        armature = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(f"BODY_{args.canonical_layer}__")
+            ),
+            None,
+        )
+    if armature is None:
+        armature = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if armature is None:
         preferred = bpy.context.scene.get("characolle_canonical_body_layer", "02")
         armature = next(
@@ -125,7 +138,16 @@ def main() -> None:
             })
 
     head_meshes = collection_meshes(head) if head is not None else []
-    base_meshes = collection_meshes(base) if base is not None else []
+    base_layer = args.base_layer or bpy.context.scene.get("characolle_base_body_layer", "02")
+    if args.base_layer and args.base_layer != "02":
+        layer_collection = bpy.data.collections.get(f"BODY_LAYER_{args.base_layer}")
+        base_meshes = [
+            mesh_entry(obj)
+            for obj in sorted(layer_collection.objects, key=lambda item: item.name.casefold())
+            if obj.type == "MESH" and re.search(r"__P_(?:body|nip)", obj.name, re.IGNORECASE)
+        ] if layer_collection is not None else []
+    else:
+        base_meshes = collection_meshes(base) if base is not None else []
     bones = []
     for bone in armature.data.bones:
         bones.append({
@@ -140,8 +162,8 @@ def main() -> None:
         "source_blend": str(args.input),
         "scene": {
             "visible_body_layer": bpy.context.scene.get("characolle_visible_body_layer", "02"),
-            "base_body_layer": bpy.context.scene.get("characolle_base_body_layer", "02"),
-            "canonical_body_layer": bpy.context.scene.get("characolle_canonical_body_layer", "02"),
+            "base_body_layer": base_layer,
+            "canonical_body_layer": args.canonical_layer or bpy.context.scene.get("characolle_canonical_body_layer", "02"),
             "base_replaced_by_variant": bool(bpy.context.scene.get("characolle_base_body_replaced", False)),
         },
         "armature": {"object": armature.name, "bones": bones},
