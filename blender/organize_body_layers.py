@@ -72,6 +72,11 @@ def main() -> None:
     if candidate_view is not None:
         candidate_view.hide_viewport = True
 
+    base_view = bpy.context.view_layer.layer_collection.children.get(base.name)
+    base_view_replaced = args.visible_layer in {"03", "04"}
+    if base_view is not None:
+        base_view.hide_viewport = base_view_replaced
+
     for obj in list(bpy.data.objects):
         match = re.match(r"BODY_(\d\d)__", obj.name)
         if not match:
@@ -100,7 +105,9 @@ def main() -> None:
 
     candidates["characolle_role"] = "candidate_bodygroups"
     base["characolle_role"] = "always_available_base_body"
+    base["characolle_hidden_by_variant"] = base_view_replaced
     bpy.context.scene["characolle_visible_body_layer"] = args.visible_layer
+    bpy.context.scene["characolle_base_body_replaced"] = base_view_replaced
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
     print(f"Organized body layers; visible layer {args.visible_layer}; saved {args.output}")

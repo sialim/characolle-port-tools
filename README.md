@@ -84,6 +84,11 @@ and leaves outfit geometry in `BODY_LAYER_00`, `BODY_LAYER_01`, and
 bodygroup setup; clothing can be fitted against `BODY_BASE` and then cleaned
 as separate release meshes.
 
+Patched packages may add `BODY_LAYER_03` and `BODY_LAYER_04`. These are
+alternate full-body surfaces rather than clothing-only layers, so the
+organizer hides `BODY_BASE` when either variant is selected to prevent
+overlapping body surfaces.
+
 Eye controls and the pupil approximation can be added after the full body
 scene is organized:
 
