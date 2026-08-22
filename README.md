@@ -125,7 +125,8 @@ controls such as `o01_J_Neck` and `o01_J_Head`. Select `o_N_kao_all` in
 `HEAD_RIG` and enter Pose Mode for face controls, including `eye_L` and
 `eye_R`; the face armature is parented to the body rig's `o01_J_Head` bone.
 Meshes with valid vertex groups but no imported armature modifier can be
-rebound with `blender/attach_skinned_mesh.py`.
+rebound with `blender/attach_skinned_mesh.py`; this is used for the tail and
+variant body overlay meshes in the supplied scenes.
 
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
