@@ -140,6 +140,36 @@ variant body overlay meshes in the supplied scenes.
    the final export/compile stage; shape keys by themselves do not create
    faceposing controls in GMod.
 
+## Automated GMod build
+
+The `gmod` scripts keep the Blender scene as the source of truth and create a
+repeatable Source export:
+
+1. `gmod/scene_manifest.py` records the shared armature, materials, flexes,
+   base meshes, head meshes, and one bodygroup entry per outfit mesh.
+2. `gmod/export_source.py` consolidates the armatures, rebinds weighted meshes,
+   limits vertex influences, exports DMX files, and renames flexes for Source.
+   Mantle cloth bones are reduced to a torso-bound export representation because
+   Source models have a 256-bone limit; the Blender scene is not modified.
+3. `gmod/generate_qc.py` creates a QC with the base, head, and individual
+   bodygroups. Outfit entries start blank so they can be enabled independently.
+4. `gmod/build_gmod.py` converts referenced textures with VTFCmd, writes VMTs,
+   runs StudioMDL, collects the compiled files, and creates a GMA package.
+
+Example Kud commands:
+
+```text
+blender --background --python gmod/scene_manifest.py -- --input C:\blends\Kud.blend --output C:\work\Kud_manifest.json --character Kud
+blender --background --python gmod/export_source.py -- --input C:\blends\Kud.blend --manifest C:\work\Kud_manifest.json --source-tools C:\tools\blender_source_tools_3.4.3 --output C:\work\Kud_export --report C:\work\Kud_export_report.json --material-path models/characolle/kud --format DMX
+python gmod/generate_qc.py --manifest C:\work\Kud_manifest.json --export C:\work\Kud_export --output C:\work\Kud_export\Kud.qc --material-path models/characolle/kud
+python gmod/build_gmod.py --manifest C:\work\Kud_manifest.json --qc C:\work\Kud_export\Kud.qc --gmod E:\SteamLibrary\steamapps\common\GarrysMod --vtfcmd C:\tools\VTFCmd.exe --textures C:\exports\Kud --textures C:\exports\Kud\head_textures --addon C:\work\characolle_kud --package C:\work\characolle_kud.gma
+```
+
+The compiled model should be visually checked in GMod for bodygroup
+combinations, eye-bone posing, flex names, and texture coverage. The generated
+addon contains only build output; source game packages and extracted assets stay
+outside the repository.
+
 ## First export targets
 
 Start with one outfit per character:
