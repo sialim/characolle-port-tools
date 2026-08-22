@@ -68,6 +68,21 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
     return len(missing)
 
 
+def unhide_object_collection(obj: bpy.types.Object) -> None:
+    obj.hide_set(False)
+    obj.hide_viewport = False
+
+    def visit(layer: bpy.types.LayerCollection) -> None:
+        if layer.collection in obj.users_collection:
+            layer.hide_viewport = False
+            layer.exclude = False
+        for child in layer.children:
+            visit(child)
+
+    for layer in bpy.context.view_layer.layer_collection.children:
+        visit(layer)
+
+
 def prepare_single_armature(canonical_layer: str | None = None) -> dict:
     canonical = None
     if canonical_layer:
@@ -102,6 +117,7 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
         )
     if canonical is None:
         raise RuntimeError("Could not find the shared body armature")
+    unhide_object_collection(canonical)
     old_armatures = {obj for obj in bpy.data.objects if obj.type == "ARMATURE" and obj != canonical}
     copied_bones = sum(copy_bones(canonical, source) for source in old_armatures)
     canonical_bones = {bone.name for bone in canonical.data.bones}
