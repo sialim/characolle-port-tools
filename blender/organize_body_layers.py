@@ -41,16 +41,26 @@ def main() -> None:
     layers = {layer: get_collection(f"BODY_LAYER_{layer}") for layer in ("00", "01", "02")}
     rigs = {layer: get_collection(f"BODY_RIG_{layer}") for layer in ("00", "01", "02")}
     candidates = get_collection("GMOD_BODYGROUP_CANDIDATES")
-    candidates.hide_viewport = True
-    candidates.hide_render = True
+    candidates.hide_viewport = False
+    candidates.hide_render = False
 
     for layer, target in layers.items():
-        target.hide_viewport = layer != args.visible_layer
-        target.hide_render = layer != args.visible_layer
+        target.hide_viewport = False
+        target.hide_render = False
+        layer_view = bpy.context.view_layer.layer_collection.children.get(target.name)
+        if layer_view is not None:
+            layer_view.hide_viewport = layer != args.visible_layer
         target["characolle_outfit_layer"] = layer
     for layer, target in rigs.items():
-        target.hide_viewport = layer != args.visible_layer
-        target.hide_render = layer != args.visible_layer
+        target.hide_viewport = False
+        target.hide_render = False
+        layer_view = bpy.context.view_layer.layer_collection.children.get(target.name)
+        if layer_view is not None:
+            layer_view.hide_viewport = layer != args.visible_layer
+
+    candidate_view = bpy.context.view_layer.layer_collection.children.get(candidates.name)
+    if candidate_view is not None:
+        candidate_view.hide_viewport = True
 
     for obj in list(bpy.data.objects):
         match = re.match(r"BODY_(\d\d)__", obj.name)
