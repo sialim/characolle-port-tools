@@ -68,6 +68,13 @@ def rebuild_material(material: bpy.types.Material, source: dict, images: dict[st
     if image is None:
         return False
 
+    overlay_names = []
+    for name in slots:
+        if not name or name.casefold() == diffuse_name.casefold():
+            continue
+        if name.casefold() not in {item.casefold() for item in overlay_names}:
+            overlay_names.append(name)
+
     material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
@@ -85,6 +92,25 @@ def rebuild_material(material: bpy.types.Material, source: dict, images: dict[st
     texture.image = image
     image.colorspace_settings.name = "sRGB"
     links.new(texture.outputs["Color"], shader.inputs["Base Color"])
+
+    overlay_name = next(
+        (name for name in overlay_names if images.get(name.casefold()) is not None),
+        "",
+    )
+    overlay = images.get(overlay_name.casefold()) if overlay_name else None
+    if overlay is not None and "Emission Color" in shader.inputs:
+        overlay_texture = nodes.new("ShaderNodeTexImage")
+        overlay_texture.name = "CharaColle Overlay"
+        overlay_texture.label = overlay.name
+        overlay_texture.location = (-320, -120)
+        overlay_texture.image = overlay
+        overlay.colorspace_settings.name = "sRGB"
+        links.new(overlay_texture.outputs["Color"], shader.inputs["Emission Color"])
+        if "Emission Strength" in shader.inputs:
+            shader.inputs["Emission Strength"].default_value = 1.0
+        material["characolle_overlay_texture"] = overlay.name
+
+    material["characolle_base_texture"] = image.name
 
     transparent = image.channels == 4 and ("nip" in diffuse_name.casefold() or "pantu" in material.name.casefold())
     if transparent and "Alpha" in texture.outputs and "Alpha" in shader.inputs:

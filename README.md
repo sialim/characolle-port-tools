@@ -66,7 +66,10 @@ corresponding `P_face` expression keys without merging the two skinned meshes.
 
 Body and outfit exports can be appended with `blender/append_body_fbx.py`.
 Run `blender/organize_body_layers.py` afterward to put each outfit in its own
-toggleable collection. The current Kud files contain:
+toggleable collection. The body material rebuild preserves both the primary
+texture and the game's secondary sell/tint texture by connecting the latter to
+Principled Emission, matching the raw SB3 FBX material setup. The current Kud
+files contain:
 
 ```text
 c02_01_00_00.xx  school uniform
