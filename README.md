@@ -111,10 +111,10 @@ To put the head and outfit layers on one usable skeleton, run the body-rig
 unifier after the eye-control step:
 
 ```text
-blender --background --python blender/unify_body_rig.py -- --input C:\blends\Kud_full_body_layers_eye_controls.blend --output C:\blends\Kud_full_body_layers_unified.blend
+blender --background --python blender/unify_body_rig.py -- --input C:\blends\Kud_full_body_layers_eye_controls.blend --output C:\blends\Kud_full_body_layers_unified.blend --canonical-layer 02
 ```
 
-The layer 02 body rig becomes `SHARED_BODY_RIG`, outfit armature modifiers are
+The selected canonical body layer becomes `SHARED_BODY_RIG`, outfit armature modifiers are
 reassigned to it, missing outfit-specific bones are copied into it, and the
 head armature is parented to `o01_J_Head`. The original outfit rigs are kept
 in a hidden `SOURCE_BODY_RIGS` collection.
@@ -123,8 +123,8 @@ The unifier also detects source-parented meshes that still have valid vertex
 groups but no armature modifier, such as skirt panels and tail pieces, and
 rebounds them to the shared rig automatically.
 
-The final scene therefore has two active armatures by design. Select
-`BODY_02__SCENE_ROOT.001` in `SHARED_BODY_RIG` and enter Pose Mode for body
+The final scene therefore has two active armatures by design. Select the
+canonical `BODY_##__SCENE_ROOT` in `SHARED_BODY_RIG` and enter Pose Mode for body
 controls such as `o01_J_Neck` and `o01_J_Head`. Select `o_N_kao_all` in
 `HEAD_RIG` and enter Pose Mode for face controls, including `eye_L` and
 `eye_R`; the face armature is parented to the body rig's `o01_J_Head` bone.

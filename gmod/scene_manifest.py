@@ -84,7 +84,24 @@ def main() -> None:
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
     armature = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if armature is None:
-        armature = next((obj for obj in bpy.data.objects if obj.type == "ARMATURE" and obj.name.startswith("BODY_02__")), None)
+        preferred = bpy.context.scene.get("characolle_canonical_body_layer", "02")
+        armature = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(f"BODY_{preferred}__")
+            ),
+            None,
+        )
+    if armature is None:
+        armature = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(("BODY_03__", "BODY_02__"))
+            ),
+            None,
+        )
     if armature is None:
         raise RuntimeError("Could not find the shared body armature")
 
@@ -123,6 +140,8 @@ def main() -> None:
         "source_blend": str(args.input),
         "scene": {
             "visible_body_layer": bpy.context.scene.get("characolle_visible_body_layer", "02"),
+            "base_body_layer": bpy.context.scene.get("characolle_base_body_layer", "02"),
+            "canonical_body_layer": bpy.context.scene.get("characolle_canonical_body_layer", "02"),
             "base_replaced_by_variant": bool(bpy.context.scene.get("characolle_base_body_replaced", False)),
         },
         "armature": {"object": armature.name, "bones": bones},

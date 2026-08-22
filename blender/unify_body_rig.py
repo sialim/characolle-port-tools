@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--canonical-layer", choices=("00", "01", "02"), default="02")
+    parser.add_argument("--canonical-layer", choices=("00", "01", "02", "03", "04"), default="02")
     return parser.parse_args(argv)
 
 
@@ -175,6 +175,7 @@ def main() -> None:
 
     attach_head(canonical)
     canonical["characolle_role"] = "shared_body_rig"
+    bpy.context.scene["characolle_canonical_body_layer"] = args.canonical_layer
     bpy.context.scene["characolle_shared_body_rig"] = canonical.name
     bpy.context.scene["characolle_head_parent_bone"] = "o01_J_Head"
     args.output.parent.mkdir(parents=True, exist_ok=True)

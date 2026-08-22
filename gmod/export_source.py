@@ -70,7 +70,24 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
 def prepare_single_armature() -> dict:
     canonical = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if canonical is None:
-        canonical = next((obj for obj in bpy.data.objects if obj.type == "ARMATURE" and obj.name.startswith("BODY_02__")), None)
+        preferred = bpy.context.scene.get("characolle_canonical_body_layer", "02")
+        canonical = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(f"BODY_{preferred}__")
+            ),
+            None,
+        )
+    if canonical is None:
+        canonical = next(
+            (
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.name.startswith(("BODY_03__", "BODY_02__"))
+            ),
+            None,
+        )
     if canonical is None:
         raise RuntimeError("Could not find the shared body armature")
     old_armatures = {obj for obj in bpy.data.objects if obj.type == "ARMATURE" and obj != canonical}

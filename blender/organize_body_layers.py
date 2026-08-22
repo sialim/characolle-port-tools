@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--visible-layer", default="02")
+    parser.add_argument("--base-layer", choices=("00", "01", "02", "03", "04"), default="02")
     return parser.parse_args(argv)
 
 
@@ -44,7 +45,7 @@ def main() -> None:
         for match in [re.match(r"BODY_(\d\d)__", obj.name)]
         if match
     }
-    layer_codes = sorted(detected_layers | {"00", "01", "02"})
+    layer_codes = sorted(detected_layers | {"00", "01", "02", args.base_layer, args.visible_layer})
     layers = {layer: get_collection(f"BODY_LAYER_{layer}") for layer in layer_codes}
     rigs = {layer: get_collection(f"BODY_RIG_{layer}") for layer in layer_codes}
     base = get_collection("BODY_BASE")
@@ -73,7 +74,7 @@ def main() -> None:
         candidate_view.hide_viewport = True
 
     base_view = bpy.context.view_layer.layer_collection.children.get(base.name)
-    base_view_replaced = args.visible_layer in {"03", "04"}
+    base_view_replaced = args.visible_layer in {"03", "04"} and args.visible_layer != args.base_layer
     if base_view is not None:
         base_view.hide_viewport = base_view_replaced
 
@@ -88,14 +89,15 @@ def main() -> None:
             if candidates.objects.get(obj.name) is None:
                 candidates.objects.link(obj)
 
+    base_prefix = f"BODY_{args.base_layer}__"
     base_objects = [
         obj
         for obj in bpy.data.objects
         if obj.type == "MESH"
         and (
-            obj.name == "BODY_02__P_nip_0"
-            or obj.name == "BODY_02__P_body_0"
-            or obj.name.startswith("BODY_02__P_body_")
+            obj.name == f"{base_prefix}P_nip_0"
+            or obj.name == f"{base_prefix}P_body_0"
+            or obj.name.startswith(f"{base_prefix}P_body_")
             and any(material and "m_body" in material.name.casefold() for material in obj.data.materials)
         )
     ]
@@ -107,6 +109,7 @@ def main() -> None:
     base["characolle_role"] = "always_available_base_body"
     base["characolle_hidden_by_variant"] = base_view_replaced
     bpy.context.scene["characolle_visible_body_layer"] = args.visible_layer
+    bpy.context.scene["characolle_base_body_layer"] = args.base_layer
     bpy.context.scene["characolle_base_body_replaced"] = base_view_replaced
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
