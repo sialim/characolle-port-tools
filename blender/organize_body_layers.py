@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--visible-layer", choices=("00", "01", "02"), default="02")
+    parser.add_argument("--visible-layer", default="02")
     return parser.parse_args(argv)
 
 
@@ -38,8 +38,15 @@ def move_to_collection(obj: bpy.types.Object, target: bpy.types.Collection) -> N
 def main() -> None:
     args = parse_args()
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
-    layers = {layer: get_collection(f"BODY_LAYER_{layer}") for layer in ("00", "01", "02")}
-    rigs = {layer: get_collection(f"BODY_RIG_{layer}") for layer in ("00", "01", "02")}
+    detected_layers = {
+        match.group(1)
+        for obj in bpy.data.objects
+        for match in [re.match(r"BODY_(\d\d)__", obj.name)]
+        if match
+    }
+    layer_codes = sorted(detected_layers | {"00", "01", "02"})
+    layers = {layer: get_collection(f"BODY_LAYER_{layer}") for layer in layer_codes}
+    rigs = {layer: get_collection(f"BODY_RIG_{layer}") for layer in layer_codes}
     base = get_collection("BODY_BASE")
     base.hide_viewport = False
     base.hide_render = False
