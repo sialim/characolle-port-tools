@@ -11,13 +11,6 @@ from pathlib import Path
 import bpy
 
 
-BODY_KEYS = {
-    "00": "c02_01_00_00.xx",
-    "01": "c02_01_01_00.xx",
-    "02": "c02_01_02_00.xx",
-}
-
-
 def parse_args() -> argparse.Namespace:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
@@ -25,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fbx", type=Path, action="append", required=True)
     parser.add_argument("--material-json", type=Path, required=True)
     parser.add_argument("--textures", type=Path, required=True)
+    parser.add_argument("--body-prefix", default="c02_01", help="Source body prefix, such as c02_01 or c02_02")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args(argv)
 
@@ -101,11 +95,11 @@ def rebuild_material(material: bpy.types.Material, source: dict, images: dict[st
     return True
 
 
-def source_for_fbx(fbx: Path, material_data: dict) -> dict:
+def source_for_fbx(fbx: Path, material_data: dict, body_prefix: str) -> dict:
     match = re.search(r"body_(\d\d)_", fbx.stem)
     if not match:
         raise RuntimeError(f"Could not determine body layer from {fbx.name}")
-    key = BODY_KEYS[match.group(1)]
+    key = f"{body_prefix}_{match.group(1)}_00.xx"
     for path, data in material_data.items():
         if path.casefold().endswith(key.casefold()):
             return data
@@ -123,7 +117,7 @@ def main() -> None:
     imported_meshes = []
 
     for fbx in sorted(args.fbx, key=lambda item: item.name.casefold()):
-        source = source_for_fbx(fbx, material_data)
+        source = source_for_fbx(fbx, material_data, args.body_prefix)
         source_materials = {item["name"]: item for item in source["materials"]}
         before = set(bpy.data.objects)
         bpy.ops.import_scene.fbx(filepath=str(fbx), automatic_bone_orientation=False)

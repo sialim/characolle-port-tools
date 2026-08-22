@@ -76,16 +76,20 @@ def main() -> None:
             if candidates.objects.get(obj.name) is None:
                 candidates.objects.link(obj)
 
-    base_names = {
-        "BODY_02__P_body_0",
-        "BODY_02__P_body_2",
-        "BODY_02__P_nip_0",
-    }
-    for name in base_names:
-        obj = bpy.data.objects.get(name)
-        if obj is not None:
-            move_to_collection(obj, base)
-            obj["characolle_role"] = "base_body"
+    base_objects = [
+        obj
+        for obj in bpy.data.objects
+        if obj.type == "MESH"
+        and (
+            obj.name == "BODY_02__P_nip_0"
+            or obj.name == "BODY_02__P_body_0"
+            or obj.name.startswith("BODY_02__P_body_")
+            and any(material and "m_body" in material.name.casefold() for material in obj.data.materials)
+        )
+    ]
+    for obj in base_objects:
+        move_to_collection(obj, base)
+        obj["characolle_role"] = "base_body"
 
     candidates["characolle_role"] = "candidate_bodygroups"
     base["characolle_role"] = "always_available_base_body"

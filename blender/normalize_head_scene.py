@@ -30,23 +30,35 @@ def image_index() -> dict[str, bpy.types.Image]:
     return result
 
 
+def suffix_image(images: dict[str, bpy.types.Image], *suffixes: str) -> bpy.types.Image | None:
+    for suffix in suffixes:
+        suffix = suffix.casefold()
+        for name, image in images.items():
+            if name.endswith(suffix):
+                return image
+    return None
+
+
 def choose_texture(material_name: str, images: dict[str, bpy.types.Image]) -> bpy.types.Image | None:
     name = material_name.casefold()
     if "namida" in name:
-        wanted = "c02_01_10_namida.tga"
+        return suffix_image(images, "_namida.tga")
     elif "hoho" in name:
-        wanted = "c02_01_10_hoho.tga"
+        return suffix_image(images, "_hoho.tga")
     elif "face_pa_tu" in name or "medama" in name or "mehikari" in name:
-        wanted = "c02_01_10_eyes.bmp"
+        return suffix_image(images, "_eyes.bmp")
+    elif "mimi" in name:
+        return suffix_image(images, "_mimi.bmp", "_hair.bmp")
+    elif "suzu" in name:
+        return suffix_image(images, "_suzu.bmp", "_hair.bmp")
     elif "hair" in name or "inumimi" in name:
-        wanted = "c02_01_10_hair.bmp"
+        return suffix_image(images, "_hair.bmp")
     elif "bousi" in name:
-        wanted = "c02_01_10_bousi.bmp"
+        return suffix_image(images, "_bousi.bmp", "_hair.bmp")
     elif "face" in name or "mimi" in name:
-        wanted = "c02_01_10_skin.bmp"
+        return suffix_image(images, "_skin.bmp")
     else:
         return None
-    return images.get(wanted.casefold())
 
 
 def set_surface_mode(material: bpy.types.Material, transparent: bool) -> None:
