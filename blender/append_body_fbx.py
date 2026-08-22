@@ -119,7 +119,7 @@ def rebuild_material(material: bpy.types.Material, source: dict, images: dict[st
 
 
 def source_for_fbx(fbx: Path, material_data: dict, body_prefix: str) -> dict:
-    match = re.search(r"body_(\d\d)_", fbx.stem)
+    match = re.search(r"body_(\d\d)(?:_|$)", fbx.stem)
     if not match:
         raise RuntimeError(f"Could not determine body layer from {fbx.name}")
     key = f"{body_prefix}_{match.group(1)}_00.xx"
