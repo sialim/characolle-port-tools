@@ -64,6 +64,20 @@ collection. Their original FBX empty parents are retained in `HEAD_RIG`.
 The face-pose linker drives matching `P_namida` tear/eyelash keys from the
 corresponding `P_face` expression keys without merging the two skinned meshes.
 
+Body and outfit exports can be appended with `blender/append_body_fbx.py`.
+Run `blender/organize_body_layers.py` afterward to put each outfit in its own
+toggleable collection. The current Kud files contain:
+
+```text
+c02_01_00_00.xx  school uniform
+c02_01_01_00.xx  pajama/private outfit, including P_pantu
+c02_01_02_00.xx  swimsuit/base-body layer, including P_body and P_bura
+```
+
+`tools/xx_mesh_names.py` lists the mesh frames and material texture slots in
+an `.xx` file. Keep outfit layers separate until the shared skeleton and
+GMod bodygroup assignments are finalized.
+
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
 7. Clean the rig and materials in Blender.
