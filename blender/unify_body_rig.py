@@ -90,6 +90,29 @@ def reassign_body_meshes(canonical: bpy.types.Object, rigs: set[bpy.types.Object
     return updated
 
 
+def reassign_weighted_parented_meshes(canonical: bpy.types.Object, rigs: set[bpy.types.Object]) -> int:
+    canonical_bones = {bone.name for bone in canonical.data.bones}
+    updated = 0
+    for obj in bpy.data.objects:
+        if obj.type != "MESH" or obj.parent not in rigs or obj.parent == canonical:
+            continue
+        if any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
+            continue
+        matching = [group.name for group in obj.vertex_groups if group.name in canonical_bones]
+        if not matching:
+            continue
+        world = obj.matrix_world.copy()
+        obj.parent = canonical
+        obj.parent_type = "OBJECT"
+        obj.matrix_world = world
+        modifier = obj.modifiers.new(name="CHARACOLLE_SHARED_RIG", type="ARMATURE")
+        modifier.object = canonical
+        obj["characolle_shared_armature"] = canonical.name
+        obj["characolle_matching_bone_groups"] = len(matching)
+        updated += 1
+    return updated
+
+
 def attach_head(canonical: bpy.types.Object) -> None:
     head = bpy.data.objects.get("o_N_kao_all")
     if head is None or head.type != "ARMATURE":
@@ -115,6 +138,7 @@ def main() -> None:
 
     copied = sum(copy_missing_bones(canonical, source) for layer, source in rigs.items() if source != canonical)
     updated = reassign_body_meshes(canonical, set(rigs.values()))
+    weighted = reassign_weighted_parented_meshes(canonical, set(rigs.values()))
 
     shared = bpy.data.collections.get("SHARED_BODY_RIG") or bpy.data.collections.new("SHARED_BODY_RIG")
     if shared.name not in bpy.context.scene.collection.children:
@@ -155,7 +179,10 @@ def main() -> None:
     bpy.context.scene["characolle_head_parent_bone"] = "o01_J_Head"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
-    print(f"Copied {copied} outfit bones, reassigned {updated} mesh(es), and attached the head; saved {args.output}")
+    print(
+        f"Copied {copied} outfit bones, reassigned {updated} skinned mesh(es), "
+        f"rebound {weighted} weighted mesh(es), and attached the head; saved {args.output}"
+    )
 
 
 if __name__ == "__main__":

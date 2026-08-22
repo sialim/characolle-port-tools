@@ -119,6 +119,10 @@ reassigned to it, missing outfit-specific bones are copied into it, and the
 head armature is parented to `o01_J_Head`. The original outfit rigs are kept
 in a hidden `SOURCE_BODY_RIGS` collection.
 
+The unifier also detects source-parented meshes that still have valid vertex
+groups but no armature modifier, such as skirt panels and tail pieces, and
+rebounds them to the shared rig automatically.
+
 The final scene therefore has two active armatures by design. Select
 `BODY_02__SCENE_ROOT.001` in `SHARED_BODY_RIG` and enter Pose Mode for body
 controls such as `o01_J_Neck` and `o01_J_Head`. Select `o_N_kao_all` in
