@@ -84,6 +84,21 @@ and leaves outfit geometry in `BODY_LAYER_00`, `BODY_LAYER_01`, and
 bodygroup setup; clothing can be fitted against `BODY_BASE` and then cleaned
 as separate release meshes.
 
+Eye controls and the pupil approximation can be added after the full body
+scene is organized:
+
+```text
+blender --background --python blender/add_eye_controls.py -- --input C:\blends\Kud_full_body_layers.blend --output C:\blends\Kud_full_body_layers_eye_controls.blend
+```
+
+This creates `eye_L` and `eye_R` bones on the head armature and parents the
+existing `P_eye_L` and `P_eye_R` hierarchies to them. Each eye mesh also gets
+a `Pupil_Small` key. Since the original pupil is painted into the eye texture,
+that key is a front-cap geometry approximation rather than a separate iris
+morph. `blender/restore_hair_overlays.py` can restore the original
+`*_hair_sel_00.bmp` or `*_hair_sell_00.bmp` material overlay when a cleaned
+scene needs it.
+
 6. Test the imported face keys in Blender. Preserve the original skeleton in
    a source collection and create a separate Source/GMod-ready collection.
 7. Clean the rig and materials in Blender.

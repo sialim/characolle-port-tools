@@ -39,6 +39,13 @@ def suffix_image(images: dict[str, bpy.types.Image], *suffixes: str) -> bpy.type
     return None
 
 
+def choose_hair_overlay(material_name: str, images: dict[str, bpy.types.Image]) -> bpy.types.Image | None:
+    name = material_name.casefold()
+    if "hair" in name or "inumimi" in name:
+        return suffix_image(images, "_hair_sel_00.bmp", "_hair_sell_00.bmp")
+    return None
+
+
 def choose_texture(material_name: str, images: dict[str, bpy.types.Image]) -> bpy.types.Image | None:
     name = material_name.casefold()
     if "namida" in name:
@@ -95,6 +102,18 @@ def rebuild_materials() -> int:
         color.image = texture
         texture.colorspace_settings.name = "sRGB"
         links.new(color.outputs["Color"], shader.inputs["Base Color"])
+
+        overlay = choose_hair_overlay(material.name, images)
+        if overlay is not None and "Emission Color" in shader.inputs:
+            emission = nodes.new("ShaderNodeTexImage")
+            emission.name = "CharaColle Hair Overlay"
+            emission.label = overlay.name
+            emission.location = (-320, -120)
+            emission.image = overlay
+            overlay.colorspace_settings.name = "sRGB"
+            links.new(emission.outputs["Color"], shader.inputs["Emission Color"])
+            if "Emission Strength" in shader.inputs:
+                shader.inputs["Emission Strength"].default_value = 1.0
 
         transparent = "namida" in material.name.casefold() or "hoho" in material.name.casefold()
         if transparent and "Alpha" in color.outputs and "Alpha" in shader.inputs:
