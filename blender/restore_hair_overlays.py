@@ -38,24 +38,22 @@ def restore(texture_dir: Path) -> int:
             continue
         material.use_nodes = True
         nodes = material.node_tree.nodes
-        links = material.node_tree.links
         shader = next((node for node in nodes if node.type == "BSDF_PRINCIPLED"), None)
-        if shader is None or "Emission Color" not in shader.inputs:
+        if shader is None:
             continue
         old = nodes.get("CharaColle Hair Overlay")
         if old is not None:
             nodes.remove(old)
+        old_mask = nodes.get("CharaColle Hair Overlay Mask")
+        if old_mask is not None:
+            nodes.remove(old_mask)
         texture = nodes.new("ShaderNodeTexImage")
-        texture.name = "CharaColle Hair Overlay"
+        texture.name = "CharaColle Hair Overlay Mask"
         texture.label = overlay.name
         texture.location = (-320, -120)
         texture.image = overlay
         overlay.colorspace_settings.name = "sRGB"
-        for link in list(shader.inputs["Emission Color"].links):
-            links.remove(link)
-        links.new(texture.outputs["Color"], shader.inputs["Emission Color"])
-        if "Emission Strength" in shader.inputs:
-            shader.inputs["Emission Strength"].default_value = 1.0
+        material["characolle_overlay_texture"] = overlay.name
         updated += 1
     return updated
 

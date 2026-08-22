@@ -67,9 +67,9 @@ corresponding `P_face` expression keys without merging the two skinned meshes.
 Body and outfit exports can be appended with `blender/append_body_fbx.py`.
 Run `blender/organize_body_layers.py` afterward to put each outfit in its own
 toggleable collection. The body material rebuild preserves both the primary
-texture and the game's secondary sell/tint texture by connecting the latter to
-Principled Emission, matching the raw SB3 FBX material setup. The current Kud
-files contain:
+texture and the game's secondary sell/tint texture as an available mask node.
+Those maps are selection masks rather than extra light, so they are not wired
+to Emission by default. The current Kud files contain:
 
 ```text
 c02_01_00_00.xx  school uniform
@@ -105,7 +105,7 @@ a `Pupil_Small` key. Since the original pupil is painted into the eye texture,
 that key is a front-cap geometry approximation rather than a separate iris
 morph. `blender/restore_hair_overlays.py` can restore the original
 `*_hair_sel_00.bmp` or `*_hair_sell_00.bmp` material overlay when a cleaned
-scene needs it.
+scene needs it; the normalizer preserves that map as an unconnected mask.
 
 To put the head and outfit layers on one usable skeleton, run the body-rig
 unifier after the eye-control step:

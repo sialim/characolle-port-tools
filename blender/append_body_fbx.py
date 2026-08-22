@@ -98,16 +98,13 @@ def rebuild_material(material: bpy.types.Material, source: dict, images: dict[st
         "",
     )
     overlay = images.get(overlay_name.casefold()) if overlay_name else None
-    if overlay is not None and "Emission Color" in shader.inputs:
+    if overlay is not None:
         overlay_texture = nodes.new("ShaderNodeTexImage")
-        overlay_texture.name = "CharaColle Overlay"
+        overlay_texture.name = "CharaColle Overlay Mask"
         overlay_texture.label = overlay.name
         overlay_texture.location = (-320, -120)
         overlay_texture.image = overlay
         overlay.colorspace_settings.name = "sRGB"
-        links.new(overlay_texture.outputs["Color"], shader.inputs["Emission Color"])
-        if "Emission Strength" in shader.inputs:
-            shader.inputs["Emission Strength"].default_value = 1.0
         material["characolle_overlay_texture"] = overlay.name
 
     material["characolle_base_texture"] = image.name
