@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--material-path", required=True)
     parser.add_argument("--model-name")
     parser.add_argument("--surfaceprop", default="flesh")
+    parser.add_argument("--scale", type=float)
     return parser.parse_args()
 
 
@@ -40,13 +41,17 @@ def main() -> None:
 
     lines = [
         f'$modelname "{model_name}.mdl"',
+    ]
+    if args.scale is not None:
+        lines.append(f"$scale {args.scale:g}")
+    lines.extend([
         f'$cdmaterials "{material_path}"',
         '$body "body" "base.dmx"',
         '$bodygroup "head"',
         "{",
         '    studio "head.dmx"',
         "}",
-    ]
+    ])
 
     require_export(args.export, "base.dmx")
     require_export(args.export, "head.dmx")

@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--textures", type=Path, action="append", required=True)
     parser.add_argument("--addon", type=Path, required=True)
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--skip-textures", action="store_true")
     parser.add_argument("--skip-compile", action="store_true")
     parser.add_argument("--skip-package", action="store_true")
     return parser.parse_args()
@@ -129,7 +130,9 @@ def main() -> None:
         "author": "characolle-port-tools",
     }
     (args.addon / "addon.json").write_text(json.dumps(addon_info, indent=2) + "\n", encoding="utf-8")
-    texture_count = convert_textures(manifest, args.textures, args.vtfcmd, args.addon, material_path)
+    texture_count = 0
+    if not args.skip_textures:
+        texture_count = convert_textures(manifest, args.textures, args.vtfcmd, args.addon, material_path)
     if not args.skip_compile:
         run([str(args.gmod / "bin" / "studiomdl.exe"), "-game", str(args.gmod / "garrysmod"), str(args.qc)], cwd=args.qc.parent)
     files = compiled_model_files(args.gmod, args.qc)
