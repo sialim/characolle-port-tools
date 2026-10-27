@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-name")
     parser.add_argument("--surfaceprop", default="flesh")
     parser.add_argument("--scale", type=float)
+    parser.add_argument("--outfit-visible", action="store_true", help="Show clothing bodygroups by default")
     return parser.parse_args()
 
 
@@ -38,6 +39,11 @@ def main() -> None:
     character = manifest["character"].lower()
     model_name = args.model_name or manifest.get("model_name") or f"characolle/{character}"
     material_path = args.material_path.replace("\\", "/").strip("/")
+    combinations = 1
+    for entry in manifest.get("bodygroups", []):
+        combinations *= 2
+        if combinations > 2**31:
+            raise ValueError("Outfit has too many independent bodygroups for signed 32-bit storage; group related parts first")
 
     lines = [
         f'$modelname "{model_name}.mdl"',
@@ -59,11 +65,11 @@ def main() -> None:
         filename = f"bg_{safe_name(entry['name'])}.dmx"
         require_export(args.export, filename)
         group_name = safe_name(entry["name"])
+        alternatives = [f'    studio "{filename}"', "    blank"] if args.outfit_visible else ["    blank", f'    studio "{filename}"']
         lines.extend([
             f'$bodygroup "{group_name}"',
             "{",
-            "    blank",
-            f'    studio "{filename}"',
+            *alternatives,
             "}",
         ])
 

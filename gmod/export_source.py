@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import bpy
+from mathutils import Matrix
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-influences", type=int, default=3)
     parser.add_argument("--keep-mantle-bones", action="store_true")
     parser.add_argument("--canonical-layer", choices=("00", "01", "02", "03", "04"))
+    parser.add_argument("--target-height", type=float, help="Normalize the exported character to this height in Source units")
     return parser.parse_args(argv)
 
 
@@ -60,6 +62,8 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
         edit_bone.use_deform = source_bone.use_deform
         if source_bone.parent:
             edit_bone.parent = canonical.data.edit_bones.get(source_bone.parent.name)
+        elif source.parent == canonical and source.parent_type == "BONE":
+            edit_bone.parent = canonical.data.edit_bones.get(source.parent_bone)
         copied.add(name)
 
     for name in sorted(missing):
@@ -284,6 +288,89 @@ def temporary_collection(name: str, objects: list[bpy.types.Object]) -> bpy.type
     return collection
 
 
+def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
+    if not 0 < target_height < 1000:
+        raise ValueError("Target height must be between 0 and 1000 Source units")
+    entries = list(manifest.get("base_objects", [])) + list(manifest.get("head_objects", []))
+    entries.extend(entry["mesh"] for entry in manifest.get("bodygroups", []))
+    objects = [bpy.data.objects[name] for name in dict.fromkeys(entry["name"] for entry in entries)]
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    points = [
+        obj.evaluated_get(graph).matrix_world @ vertex.co
+        for obj in objects
+        for vertex in obj.evaluated_get(graph).data.vertices
+    ]
+    bottom, top = min(point.z for point in points), max(point.z for point in points)
+    height = top - bottom
+    if height <= 0:
+        raise RuntimeError("The reference body and head have no measurable height")
+    factor = target_height / height
+    transform = Matrix.Scale(factor, 4) @ Matrix.Translation((0, 0, -bottom))
+    reference_samples = {
+        obj.name: [(index, transform @ obj.evaluated_get(graph).matrix_world @ obj.evaluated_get(graph).data.vertices[index].co)
+                   for index in range(0, len(obj.data.vertices), max(1, len(obj.data.vertices) // 32))]
+        for obj in objects
+    }
+    armatures = {modifier.object for obj in objects for modifier in obj.modifiers
+                 if modifier.type == "ARMATURE" and modifier.object is not None}
+    if len(armatures) != 1:
+        raise RuntimeError(f"Expected one export armature, found {len(armatures)}")
+    armature = next(iter(armatures))
+    matrices = {obj: obj.matrix_world.copy() for obj in objects + [armature]}
+
+    def rigid_parent_bone(obj):
+        current = obj
+        while current.parent is not None:
+            if current.parent == armature and current.parent_type == "BONE":
+                return current.parent_bone
+            current = current.parent
+        return None
+
+    rigid_attachments = {}
+    for obj in objects:
+        bone = rigid_parent_bone(obj)
+        if bone and not any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
+            rigid_attachments[obj] = bone
+    for obj in objects:
+        obj.data = obj.data.copy()
+        obj.data.transform(transform @ matrices[obj], shape_keys=True)
+        obj.parent = None
+        obj.matrix_world = Matrix.Identity(4)
+        obj.data.update()
+    armature.data = armature.data.copy()
+    armature_transform = transform @ matrices[armature]
+    scales = armature_transform.to_scale()
+    if max(scales) - min(scales) > max(scales) * 0.0001:
+        raise RuntimeError("Normalize the armature's non-uniform scale before exporting")
+    armature.data.transform(armature_transform)
+    pose_translation_scale = scales.x
+    for bone in armature.pose.bones:
+        bone.location *= pose_translation_scale
+    armature.parent = None
+    armature.matrix_world = Matrix.Identity(4)
+    bpy.context.view_layer.update()
+    for obj, bone in rigid_attachments.items():
+        obj.parent = armature
+        obj.parent_type = "BONE"
+        obj.parent_bone = bone
+    bpy.context.view_layer.update()
+    for obj in rigid_attachments:
+        obj.matrix_world = Matrix.Identity(4)
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    errors = {obj.name: max(
+        (obj.evaluated_get(graph).matrix_world @ obj.evaluated_get(graph).data.vertices[index].co - expected).length
+        for index, expected in reference_samples[obj.name]) for obj in objects}
+    maximum_error = max(errors.values())
+    if maximum_error > 0.01:
+        largest = sorted(errors.items(), key=lambda entry: entry[1], reverse=True)[:5]
+        raise RuntimeError(f"Normalizing transforms changed the fitted geometry: {largest}")
+    return {"reference_height_before": height, "target_height": target_height,
+            "coordinate_scale": factor, "reference_ground_before": bottom,
+            "normalized_meshes": len(objects), "maximum_geometry_error": maximum_error}
+
+
 def export_collection(collection: bpy.types.Collection, output: Path, material_path: str, export_format: str) -> None:
     scene = bpy.context.scene
     scene.vs.export_path = str(output)
@@ -304,6 +391,8 @@ def main() -> None:
         staging.update(simplify_mantle_bones())
     staging["pruned_vertices"] = prune_weights(args.max_influences)
     staging["renamed_shape_keys"] = clean_shape_names()
+    if args.target_height is not None:
+        staging["coordinate_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)
     exported = []
 

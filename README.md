@@ -149,12 +149,22 @@ repeatable Source export:
    base meshes, head meshes, and one bodygroup entry per outfit mesh.
 2. `gmod/export_source.py` consolidates the armatures, rebinds weighted meshes,
    limits vertex influences, exports DMX files, and renames flexes for Source.
+   Use `--target-height 72` to flatten mesh and rig transforms into a measured
+   Source-unit height. This preserves nested eye attachments and checks sampled
+   evaluated vertices before exporting. Keep QC scale at its default for these
+   normalized exports; an additional `$scale 400` would multiply the height again.
    Mantle cloth bones are reduced to a torso-bound export representation because
    Source models have a 256-bone limit; the Blender scene is not modified.
 3. `gmod/generate_qc.py` creates a QC with the base, head, and individual
    bodygroups. Outfit entries start blank so they can be enabled independently.
+   Pass `--outfit-visible` for an outfit model that starts fully dressed. The
+   generator rejects bodygroup tables that overflow signed 32-bit storage.
 4. `gmod/build_gmod.py` converts referenced textures with VTFCmd, writes VMTs,
    runs StudioMDL, collects the compiled files, and creates a GMA package.
+   Before packaging, `gmod/validate_model.py` checks the compiled height,
+   bodygroup bases, companion-file checksums, and packaged VMT/VTF references.
+   This is an offline check; successful validation still requires an in-game
+   rendering and posing test. These QCs do not generate ragdoll physics.
 
 Example Kud commands:
 

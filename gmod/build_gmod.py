@@ -9,6 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from validate_model import validate_model
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -36,7 +38,7 @@ def material_entries(manifest: dict) -> dict[str, dict]:
     objects += [entry["mesh"] for entry in manifest.get("bodygroups", [])]
     for obj in objects:
         for material in obj.get("materials", []):
-            name = re.sub(r"^(?:BODY_\d\d__|CHARACTER_HEAD__)", "", material["name"])
+            name = material["name"].casefold()
             entries.setdefault(name, material)
     return entries
 
@@ -80,10 +82,12 @@ def convert_textures(manifest: dict, roots: list[Path], vtfcmd: Path, addon: Pat
         vmt = output / f"{material_name}.vmt"
         normalized_material_path = material_path.replace("\\", "/").strip("/")
         base = f"{normalized_material_path}/{Path(image_name).stem}"
+        alpha = '    "$translucent" "1"\n' if source.suffix.casefold() == ".tga" else ""
         vmt.write_text(
             '"VertexLitGeneric"\n{\n'
             f'    "$basetexture" "{base}"\n'
             '    "$model" "1"\n'
+            f'{alpha}'
             '}\n',
             encoding="utf-8",
             newline="\n",
@@ -137,6 +141,14 @@ def main() -> None:
         run([str(args.gmod / "bin" / "studiomdl.exe"), "-game", str(args.gmod / "garrysmod"), str(args.qc)], cwd=args.qc.parent)
     files = compiled_model_files(args.gmod, args.qc)
     model_count = copy_compiled_files(files, args.gmod, args.addon)
+    model = next((path for path in files if path.suffix.casefold() == ".mdl"), None)
+    if model is None:
+        raise RuntimeError("StudioMDL produced no MDL file")
+    validation = validate_model(model, args.addon)
+    validation_path = args.addon.parent / f"{args.addon.name}_validation.json"
+    validation_path.write_text(json.dumps(validation, indent=2) + "\n", encoding="utf-8")
+    if not validation["passed"]:
+        raise RuntimeError(f"Compiled model failed validation: {validation['errors']}")
     if not args.skip_package:
         args.package.parent.mkdir(parents=True, exist_ok=True)
         run([str(args.gmod / "bin" / "gmad.exe"), "create", "-folder", str(args.addon), "-out", str(args.package)])
