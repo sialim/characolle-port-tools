@@ -125,9 +125,16 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
     old_armatures = {obj for obj in bpy.data.objects if obj.type == "ARMATURE" and obj != canonical}
     copied_bones = sum(copy_bones(canonical, source) for source in old_armatures)
     canonical_bones = {bone.name for bone in canonical.data.bones}
+    inherited_attachments = {
+        source: source.parent_bone for source in old_armatures
+        if source.parent == canonical and source.parent_type == "BONE"
+        and source.parent_bone in canonical_bones
+    }
     rebound = 0
+    restored_attachments = 0
     for obj in list(bpy.data.objects):
         old_parent = obj.parent in old_armatures
+        parent_bone = obj.parent_bone if obj.parent_type == "BONE" else inherited_attachments.get(obj.parent, "")
         old_modifiers = [modifier for modifier in obj.modifiers if modifier.type == "ARMATURE" and modifier.object in old_armatures]
         if not old_parent and not old_modifiers:
             continue
@@ -142,22 +149,29 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
                     modifier.object = canonical
             if old_parent:
                 obj.parent = canonical
-                obj.parent_type = "OBJECT"
+                if parent_bone in canonical_bones and not any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
+                    obj.parent_type = "BONE"
+                    obj.parent_bone = parent_bone
+                    restored_attachments += 1
+                else:
+                    obj.parent_type = "OBJECT"
                 obj.matrix_world = world
             rebound += 1
         elif old_parent:
-            parent_bone = obj.parent_bone if obj.parent_type == "BONE" else ""
             obj.parent = canonical
             if parent_bone and parent_bone in canonical_bones:
                 obj.parent_type = "BONE"
                 obj.parent_bone = parent_bone
+                restored_attachments += 1
             else:
                 obj.parent_type = "OBJECT"
             obj.matrix_world = world
 
     for armature in old_armatures:
         bpy.data.objects.remove(armature, do_unlink=True)
-    return {"armature": canonical.name, "copied_bones": copied_bones, "rebound_objects": rebound, "removed_armatures": len(old_armatures)}
+    bpy.context.view_layer.update()
+    return {"armature": canonical.name, "copied_bones": copied_bones, "rebound_objects": rebound,
+            "removed_armatures": len(old_armatures), "restored_rigid_attachments": restored_attachments}
 
 
 def prune_weights(max_influences: int) -> int:
@@ -332,6 +346,12 @@ def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
         bone = rigid_parent_bone(obj)
         if bone and not any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
             rigid_attachments[obj] = bone
+    head_names = {entry["name"] for entry in manifest.get("head_objects", [])}
+    detached_head_meshes = [obj.name for obj in objects if obj.name in head_names
+                            and obj not in rigid_attachments
+                            and not any(modifier.type == "ARMATURE" for modifier in obj.modifiers)]
+    if detached_head_meshes:
+        raise RuntimeError(f"Head meshes have no bone attachment: {detached_head_meshes}")
     for obj in objects:
         obj.data = obj.data.copy()
         obj.data.transform(transform @ matrices[obj], shape_keys=True)
