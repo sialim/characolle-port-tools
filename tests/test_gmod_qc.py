@@ -53,6 +53,16 @@ class QcGenerationTests(unittest.TestCase):
         self.assertIn('$model "head" "head.dmx" {\n', text)
         self.assertIn('%KuchiAkiA = KuchiAkiA', text)
         self.assertIn('%NamidaBacetoji = NamidaBacetoji + MeBaseToji', text)
+        self.assertIn('    noautodmxrules\n', text)
+        self.assertIn('flexcontroller phoneme range 0 1 "MeBaseToji"', text)
+
+    def test_pupil_submeshes_share_one_controller(self):
+        result, qc = self.generate(0, flexes=["PupilSmall", "PupilSmalleyeL1", "PupilSmalleyeR0"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = qc.read_text()
+        self.assertEqual(text.count("flexcontroller "), 1)
+        self.assertIn('%PupilSmalleyeL1 = PupilSmall', text)
+        self.assertIn('%PupilSmalleyeR0 = PupilSmall', text)
 
     def test_bundling_preserves_geometry_and_all_materials(self):
         meshes = [{"name": f"BODY_00__P_dou_{i}", "materials": [{"name": f"torso_{i}"}]} for i in range(12)]

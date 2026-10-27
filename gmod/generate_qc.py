@@ -59,6 +59,11 @@ def main() -> None:
     flexes = json.loads(flex_path.read_text(encoding="utf-8")) if flex_path.is_file() else []
     if flexes:
         lines.append('$model "head" "head.dmx" {')
+        lines.append("    noautodmxrules")
+        for flex in flexes:
+            if flex.startswith("PupilSmall") and flex != "PupilSmall" and "PupilSmall" in flexes:
+                continue
+            lines.append(f'    flexcontroller phoneme range 0 1 "{flex}"')
         links = {"NamidaBacetoji": "MeBaseToji", "NamidaBace": "MeBase",
                  "NamidaL": "MeWinL", "NamidaR": "MeWinR", "Namidaten": "MeTen", "Namidanik": "MeNiko"}
         alias_path = args.export / "flex_aliases.json"

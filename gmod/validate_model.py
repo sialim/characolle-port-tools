@@ -47,6 +47,10 @@ def validate_model(path: Path, addon: Path | None = None, require_physics: bool 
     flex_descriptors, flex_controllers, flex_rules = integer(260), integer(268), integer(276)
     if flex_controllers and not flex_rules:
         errors.append("Facial controllers have no compiled flex rules")
+    rule_targets = [integer(integer(280) + 12 * index) for index in range(flex_rules)]
+    duplicate_flex_rules = len(rule_targets) - len(set(rule_targets))
+    if duplicate_flex_rules:
+        errors.append(f"Repeated flex rules overwrite facial links: {duplicate_flex_rules}")
     combinations = 1
     bodyparts = []
     for index in range(integer(232)):
@@ -106,6 +110,7 @@ def validate_model(path: Path, addon: Path | None = None, require_physics: bool 
             errors.append(f"Missing base texture referenced by {vmt.name}")
     return {"model": str(path), "bone_count": bone_count, "bodyparts": bodyparts,
             "flex_descriptors": flex_descriptors, "flex_controllers": flex_controllers, "flex_rules": flex_rules,
+            "duplicate_flex_rules": duplicate_flex_rules,
             "body_combinations": combinations, "vertex_bounds": bounds, "height": height,
             "materials": materials, "has_physics": physics_path.is_file(), "physics_solids": physics_solids,
             "errors": errors, "passed": not errors}

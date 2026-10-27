@@ -165,11 +165,15 @@ repeatable Source export:
    rules in GMod. Matching eyelash morphs follow the face expression controls.
    Face-parts meshes with the same ordered expression list follow the main face
    through `flex_aliases.json`, while retaining their separate adjustment sliders.
+   The block declares controllers explicitly and disables automatic DMX rules;
+   otherwise StudioMDL appends rules that overwrite those links. Pupil submeshes
+   share one `PupilSmall` slider.
 4. `gmod/build_gmod.py` converts referenced textures with VTFCmd, writes VMTs,
    runs StudioMDL, collects the compiled files, and creates a GMA package.
    Before packaging, `gmod/validate_model.py` checks the compiled height,
    bodygroup bases, companion-file checksums, and packaged VMT/VTF references.
-   It rejects facial controllers with no compiled flex rules.
+   It rejects facial controllers with no compiled flex rules and repeated rules
+   that overwrite the same target.
    This is an offline check; successful validation still requires an in-game
    rendering and posing test. Ragdoll builds also check the PHY checksum and
    require between 1 and 32 physics solids.
