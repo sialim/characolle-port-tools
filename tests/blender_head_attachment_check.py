@@ -56,3 +56,22 @@ for obj in (holder, eye_holder):
     assert error < 0.00001, (obj.name, error)
 assert report["restored_rigid_attachments"] == 2
 print("PASS: inherited face and explicit eye attachments retain their bones and transforms")
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+old_body = armature("BODY_02__SCENE_ROOT", ["body_root", "head"])
+new_body = armature("BODY_03__SCENE_ROOT", ["body_root", "head"])
+head = armature("head_source", ["face_root"])
+head.parent = old_body
+head.parent_type = "BONE"
+head.parent_bone = "head"
+holder = bpy.data.objects.new("face_holder", None)
+bpy.context.scene.collection.objects.link(holder)
+holder.parent = head
+bpy.context.view_layer.update()
+expected_world = holder.matrix_world.copy()
+exporter.prepare_single_armature("03")
+assert holder.parent == new_body and holder.parent_type == "BONE" and holder.parent_bone == "head"
+assert new_body.data.bones["face_root"].parent.name == "head"
+error = max(abs(holder.matrix_world[row][col] - expected_world[row][col]) for row in range(4) for col in range(4))
+assert error < 0.00001, error
+print("PASS: switching body layers preserves the inherited head attachment")

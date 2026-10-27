@@ -35,7 +35,7 @@ def clean_image_name(value: str) -> str:
 def material_entries(manifest: dict) -> dict[str, dict]:
     entries: dict[str, dict] = {}
     objects = list(manifest.get("base_objects", [])) + list(manifest.get("head_objects", []))
-    objects += [entry["mesh"] for entry in manifest.get("bodygroups", [])]
+    objects += [mesh for entry in manifest.get("bodygroups", []) for mesh in (entry.get("meshes") or [entry["mesh"]])]
     for obj in objects:
         for material in obj.get("materials", []):
             name = material["name"].casefold()
@@ -77,7 +77,15 @@ def convert_textures(manifest: dict, roots: list[Path], vtfcmd: Path, addon: Pat
             continue
         vtf_name = Path(image_name).stem + ".vtf"
         if vtf_name.casefold() not in converted:
-            run([str(vtfcmd), "-file", str(source), "-output", str(output), "-format", "DXT5", "-nothumbnail", "-silent"])
+            destination = output / vtf_name
+            previous_time = destination.stat().st_mtime_ns if destination.is_file() else None
+            command = [str(vtfcmd), "-file", str(source), "-output", str(output), "-format", "DXT5", "-nothumbnail"]
+            run([*command, "-silent"])
+            if not destination.is_file() or destination.stat().st_mtime_ns == previous_time:
+                print(f"Retrying texture conversion at the nearest power-of-two size: {source.name}")
+                run([*command, "-resize", "-rmethod", "NEAREST", "-rfilter", "CATROM"])
+            if not destination.is_file() or destination.stat().st_mtime_ns == previous_time:
+                raise RuntimeError(f"VTFCmd did not produce the requested texture: {destination}")
             converted.add(vtf_name.casefold())
         vmt = output / f"{material_name}.vmt"
         normalized_material_path = material_path.replace("\\", "/").strip("/")

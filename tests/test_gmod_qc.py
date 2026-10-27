@@ -9,6 +9,7 @@ from pathlib import Path
 GMOD = Path(__file__).resolve().parents[1] / "gmod"
 sys.path.insert(0, str(GMOD))
 from build_gmod import material_entries
+from bundle_manifest import bundle
 
 
 class QcGenerationTests(unittest.TestCase):
@@ -52,6 +53,15 @@ class QcGenerationTests(unittest.TestCase):
         self.assertIn('$model "head" "head.dmx" {\n', text)
         self.assertIn('%KuchiAkiA = KuchiAkiA', text)
         self.assertIn('%NamidaBacetoji = NamidaBacetoji + MeBaseToji', text)
+
+    def test_bundling_preserves_geometry_and_all_materials(self):
+        meshes = [{"name": f"BODY_00__P_dou_{i}", "materials": [{"name": f"torso_{i}"}]} for i in range(12)]
+        source = {"bodygroups": [{"name": f"00_p_dou_{i}", "layer": "00", "mesh": mesh} for i, mesh in enumerate(meshes)]}
+        result = bundle(source, ["P_dou"])
+        self.assertEqual(len(result["bodygroups"]), 1)
+        self.assertEqual(result["bodygroups"][0]["meshes"], meshes)
+        self.assertEqual(set(material_entries(result)), {f"torso_{i}" for i in range(12)})
+        self.assertEqual(len(source["bodygroups"]), 12)
 
 
 if __name__ == "__main__":

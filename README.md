@@ -163,6 +163,8 @@ repeatable Source export:
    The head uses a `$model` block with explicit facial rules from `flexes.json`.
    Exporting it only as a bodygroup can leave named sliders without executable
    rules in GMod. Matching eyelash morphs follow the face expression controls.
+   Face-parts meshes with the same ordered expression list follow the main face
+   through `flex_aliases.json`, while retaining their separate adjustment sliders.
 4. `gmod/build_gmod.py` converts referenced textures with VTFCmd, writes VMTs,
    runs StudioMDL, collects the compiled files, and creates a GMA package.
    Before packaging, `gmod/validate_model.py` checks the compiled height,
@@ -180,6 +182,18 @@ hinge limits chosen from the source bone orientation. Hair and outfit bones foll
 their existing parents. This is a starting collision rig; unusual outfits may need
 hull or joint-limit adjustments after an in-game test. Source Blender files retain
 their original size and fitted geometry.
+
+For outfits with too many independent parts, `gmod/bundle_manifest.py` combines
+related material submeshes into one bodygroup. Run it on an outfit-specific manifest,
+for example `--prefix P_dou` for the torso garment. Each member mesh, its weights,
+and its materials are exported together; no geometry is joined or discarded. This
+keeps the other garment toggles separate and brings large outfits below the limit.
+The exporter also adds eye controls in staging when the original head rig and eye
+markers are present but eye bones have not yet been created.
+
+VTFCmd can return success without writing a texture when the source dimensions
+are unsupported. The builder checks each output and, when needed, retries at the
+nearest power-of-two size. Original images are kept unchanged.
 
 Example Kud commands:
 

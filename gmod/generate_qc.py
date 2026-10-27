@@ -61,6 +61,9 @@ def main() -> None:
         lines.append('$model "head" "head.dmx" {')
         links = {"NamidaBacetoji": "MeBaseToji", "NamidaBace": "MeBase",
                  "NamidaL": "MeWinL", "NamidaR": "MeWinR", "Namidaten": "MeTen", "Namidanik": "MeNiko"}
+        alias_path = args.export / "flex_aliases.json"
+        if alias_path.is_file():
+            links.update(json.loads(alias_path.read_text(encoding="utf-8")))
         for flex in flexes:
             control = flex
             if flex.startswith("PupilSmall") and "PupilSmall" in flexes:

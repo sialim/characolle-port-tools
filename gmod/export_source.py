@@ -63,7 +63,7 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
         edit_bone.use_deform = source_bone.use_deform
         if source_bone.parent:
             edit_bone.parent = canonical.data.edit_bones.get(source_bone.parent.name)
-        elif source.parent == canonical and source.parent_type == "BONE":
+        elif source.parent is not None and source.parent.type == "ARMATURE" and source.parent_type == "BONE":
             edit_bone.parent = canonical.data.edit_bones.get(source.parent_bone)
         copied.add(name)
 
@@ -128,7 +128,7 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
     canonical_bones = {bone.name for bone in canonical.data.bones}
     inherited_attachments = {
         source: source.parent_bone for source in old_armatures
-        if source.parent == canonical and source.parent_type == "BONE"
+        if source.parent in (old_armatures | {canonical}) and source.parent_type == "BONE"
         and source.parent_bone in canonical_bones
     }
     rebound = 0
@@ -307,7 +307,7 @@ def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
     if not 0 < target_height < 1000:
         raise ValueError("Target height must be between 0 and 1000 Source units")
     entries = list(manifest.get("base_objects", [])) + list(manifest.get("head_objects", []))
-    entries.extend(entry["mesh"] for entry in manifest.get("bodygroups", []))
+    entries.extend(mesh for entry in manifest.get("bodygroups", []) for mesh in (entry.get("meshes") or [entry["mesh"]]))
     objects = [bpy.data.objects[name] for name in dict.fromkeys(entry["name"] for entry in entries)]
     bpy.context.view_layer.update()
     graph = bpy.context.evaluated_depsgraph_get()
@@ -481,7 +481,16 @@ def main() -> None:
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     register_source_tools(args.source_tools)
     bpy.ops.wm.open_mainfile(filepath=str(args.input))
+    eye_controls_added = 0
+    head_rig = bpy.data.objects.get("o_N_kao_all")
+    if (head_rig is not None and head_rig.type == "ARMATURE"
+            and not all(name in head_rig.data.bones for name in ("eye_L", "eye_R"))
+            and all(bpy.data.objects.get(name) is not None for name in ("o_N_eye_L", "o_N_eye_R"))):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "blender"))
+        from add_eye_controls import add_eye_controls
+        eye_controls_added = add_eye_controls()
     staging = prepare_single_armature(args.canonical_layer)
+    staging["eye_controls_added"] = eye_controls_added
     if not args.keep_mantle_bones:
         staging.update(simplify_mantle_bones())
     staging["pruned_vertices"] = prune_weights(args.max_influences)
@@ -493,6 +502,18 @@ def main() -> None:
                    if bpy.data.objects[entry["name"]].data.shape_keys
                    for key in bpy.data.objects[entry["name"]].data.shape_keys.key_blocks if key.name != "Basis"]
     (args.output / "flexes.json").write_text(json.dumps(head_flexes, indent=2), encoding="utf-8")
+    face = bpy.data.objects.get("P_face")
+    aliases = {}
+    if face and face.data.shape_keys:
+        face_keys = list(face.data.shape_keys.key_blocks)[1:]
+        for entry in manifest.get("head_objects", []):
+            obj = bpy.data.objects[entry["name"]]
+            if obj.name.startswith("P_faceparts") and obj.data.shape_keys:
+                keys = list(obj.data.shape_keys.key_blocks)[1:]
+                if len(keys) != len(face_keys):
+                    raise RuntimeError("Face and face-parts expression lists have different lengths")
+                aliases.update({target.name: source.name for source, target in zip(face_keys, keys)})
+    (args.output / "flex_aliases.json").write_text(json.dumps(aliases, indent=2), encoding="utf-8")
     exported = []
 
     def objects_from(entries: list[dict]) -> list[bpy.types.Object]:
@@ -505,7 +526,7 @@ def main() -> None:
         return result
 
     groups = [("base", manifest.get("base_objects", [])), ("head", manifest.get("head_objects", []))]
-    groups.extend((f"bg_{entry['name']}", [entry["mesh"]]) for entry in manifest.get("bodygroups", []))
+    groups.extend((f"bg_{entry['name']}", entry.get("meshes") or [entry["mesh"]]) for entry in manifest.get("bodygroups", []))
     for name, entries in groups:
         objects = objects_from(entries)
         collection = temporary_collection(name, objects)
