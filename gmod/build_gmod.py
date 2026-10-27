@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -185,7 +186,16 @@ def main() -> None:
     model = next((path for path in files if path.suffix.casefold() == ".mdl"), None)
     if model is None:
         raise RuntimeError("StudioMDL produced no MDL file")
-    validation = validate_model(model, args.addon, bool(re.search(r'^\$collisionjoints\s', qc_text, re.MULTILINE | re.IGNORECASE)))
+    attachment_path = args.qc.parent / "attachments.json"
+    attachments = json.loads(attachment_path.read_text(encoding="utf-8")) if attachment_path.is_file() else None
+    required_attachments = tuple(entry["name"] for entry in attachments["attachments"]) if attachments else ()
+    require_physics = bool(re.search(r'^\$collisionjoints\s', qc_text, re.MULTILINE | re.IGNORECASE))
+    validation = validate_model(model, args.addon, require_physics, required_attachments)
+    if attachments:
+        expected_eye = attachments["eye_position"]
+        if math.dist(validation["eye_position"], expected_eye) > 0.001:
+            validation["errors"].append("Compiled eye position does not match the exported eye center")
+            validation["passed"] = False
     validation_path = args.addon.parent / f"{args.addon.name}_validation.json"
     validation_path.write_text(json.dumps(validation, indent=2) + "\n", encoding="utf-8")
     if not validation["passed"]:

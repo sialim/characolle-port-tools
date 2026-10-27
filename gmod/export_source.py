@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -654,6 +655,72 @@ def export_collection(collection: bpy.types.Collection, output: Path, material_p
         raise RuntimeError(f"Source Tools did not write the requested mesh: {collection.name + suffix}")
 
 
+def prepare_eye_control_frame(manifest: dict) -> dict:
+    armatures = {modifier.object for entry in manifest["base_objects"]
+                 for modifier in bpy.data.objects[entry["name"]].modifiers
+                 if modifier.type == "ARMATURE" and modifier.object}
+    if len(armatures) != 1:
+        return {}
+    armature = armatures.pop()
+    if not all(name in armature.data.bones for name in ("eye_L", "eye_R", "o01_J_Head")):
+        return {}
+    center = armature.matrix_world @ ((armature.data.bones["eye_L"].head_local
+                                      + armature.data.bones["eye_R"].head_local) * 0.5)
+    meshes = [bpy.data.objects[entry["name"]] for entry in manifest["head_objects"]]
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    samples = {obj.name: [(i, obj.evaluated_get(graph).matrix_world @ obj.evaluated_get(graph).data.vertices[i].co)
+                         for i in range(0, len(obj.data.vertices), max(1, len(obj.data.vertices) // 32))]
+               for obj in meshes}
+    bpy.ops.object.select_all(action="DESELECT")
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="EDIT")
+    bones = armature.data.edit_bones
+    saved = {name: (bones[name].matrix.copy(), bones[name].length) for name in ("eye_L", "eye_R")}
+    frame = bones.get("eye_controls") or bones.new("eye_controls")
+    frame.parent = bones["o01_J_Head"]
+    frame.use_connect = False
+    inverse = armature.matrix_world.inverted()
+    frame.head = inverse @ center
+    frame.tail = inverse @ (center + Vector((0, 0.1, 0)))
+    frame.align_roll(inverse.to_3x3() @ Vector((-1, 0, 0)))
+    for name, (matrix, length) in saved.items():
+        bones[name].parent = frame
+        bones[name].use_connect = False
+        bones[name].matrix = matrix
+        bones[name].length = length
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    error = max((obj.evaluated_get(graph).matrix_world @ obj.evaluated_get(graph).data.vertices[i].co - point).length
+                for obj in meshes for i, point in samples[obj.name])
+    if error > 0.01:
+        raise RuntimeError(f"Eye control frame changed the neutral head geometry: {error}")
+    return {"bone": "eye_controls", "maximum_geometry_error": error}
+
+
+def eye_attachments(manifest: dict) -> dict | None:
+    armatures = {modifier.object for entry in manifest["base_objects"]
+                 for modifier in bpy.data.objects[entry["name"]].modifiers
+                 if modifier.type == "ARMATURE" and modifier.object}
+    if len(armatures) != 1:
+        return None
+    armature = armatures.pop()
+    bones = armature.data.bones
+    if not all(name in bones for name in ("eye_L", "eye_R", "o01_J_Head")):
+        return None
+    center = armature.matrix_world @ ((bones["eye_L"].head_local + bones["eye_R"].head_local) * 0.5)
+    head = armature.matrix_world @ bones["o01_J_Head"].matrix_local
+    local_position = head.inverted() @ center
+    forward = Matrix(((0, 1, 0), (-1, 0, 0), (0, 0, 1)))
+    local_rotation = head.to_3x3().inverted() @ forward
+    euler = local_rotation.to_euler("XYZ")
+    angles = [math.degrees(euler.y), math.degrees(euler.z), math.degrees(euler.x)]
+    return {"eye_position": list(center), "attachments": [{"name": "eyes", "bone": "o01_J_Head",
+            "position": list(local_position), "rotation": angles}]}
+
+
 def create_physics(manifest: dict, output: Path, height: float) -> bpy.types.Object:
     """Build sixteen separate convex hulls, each rigidly weighted to one body joint."""
     armature = next(mod.object for entry in manifest["base_objects"]
@@ -757,6 +824,10 @@ def main() -> None:
         staging["post_clearance_pruned_vertices"] = prune_weights(args.max_influences)
         staging["post_clearance_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)
+    staging["eye_control_frame"] = prepare_eye_control_frame(manifest)
+    attachments = eye_attachments(manifest)
+    if attachments is not None:
+        (args.output / "attachments.json").write_text(json.dumps(attachments, indent=2), encoding="utf-8")
     head_flexes = [key.name for entry in manifest.get("head_objects", [])
                    if bpy.data.objects[entry["name"]].data.shape_keys
                    for key in bpy.data.objects[entry["name"]].data.shape_keys.key_blocks if key.name != "Basis"]

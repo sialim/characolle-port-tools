@@ -194,6 +194,13 @@ and its materials are exported together; no geometry is joined or discarded. Thi
 keeps the other garment toggles separate and brings large outfits below the limit.
 The exporter also adds eye controls in staging when the original head rig and eye
 markers are present but eye bones have not yet been created.
+When both eye bones are available, it adds an `eye_controls` parent aligned for
+the bone-based Eye Poser and writes a head-local `eyes` attachment. Neutral mesh
+positions are checked before exporting. The QC includes the attachment and eye
+center; the build validator checks that the attachment survived compilation and
+that the compiled eye center matches the export. These changes affect export
+staging only. Verify selection and both movement axes with the installed Eye
+Poser, since tool variants can use different bone conventions.
 
 For small intersections with the shared body, `gmod/split_manifest.py` accepts
 repeated `--clearance-mesh` arguments with exact outfit object names. The default

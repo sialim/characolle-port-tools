@@ -13,7 +13,7 @@ from bundle_manifest import bundle
 
 
 class QcGenerationTests(unittest.TestCase):
-    def generate(self, count, *extra, flexes=None):
+    def generate(self, count, *extra, flexes=None, attachments=None):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
@@ -21,6 +21,8 @@ class QcGenerationTests(unittest.TestCase):
         (root / "manifest.json").write_text(json.dumps({"character": "Fixture", "bodygroups": groups}))
         if flexes is not None:
             (root / "flexes.json").write_text(json.dumps(flexes))
+        if attachments is not None:
+            (root / "attachments.json").write_text(json.dumps(attachments))
         for name in ["base.dmx", "head.dmx", *[f"bg_{g['name']}.dmx" for g in groups]]:
             (root / name).touch()
         result = subprocess.run([sys.executable, str(GMOD / "generate_qc.py"), "--manifest", str(root / "manifest.json"),
@@ -63,6 +65,14 @@ class QcGenerationTests(unittest.TestCase):
         self.assertEqual(text.count("flexcontroller "), 1)
         self.assertIn('%PupilSmalleyeL1 = PupilSmall', text)
         self.assertIn('%PupilSmalleyeR0 = PupilSmall', text)
+
+    def test_eye_attachment_keeps_origin_and_rotation(self):
+        data = {"eye_position": [0, -2, 53], "attachments": [{"name": "eyes", "bone": "head",
+                "position": [1, 2, 3], "rotation": [-90, -90, 0]}]}
+        result, qc = self.generate(0, attachments=data)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('$eyeposition -2 0 53', qc.read_text())
+        self.assertIn('$attachment "eyes" "head" 1 2 3 rotate -90 -90 0', qc.read_text())
 
     def test_bundling_preserves_geometry_and_all_materials(self):
         meshes = [{"name": f"BODY_00__P_dou_{i}", "materials": [{"name": f"torso_{i}"}]} for i in range(12)]

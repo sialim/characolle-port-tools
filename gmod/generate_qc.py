@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 
@@ -55,6 +56,20 @@ def main() -> None:
         f'$cdmaterials "{material_path}"',
         '$body "body" "base.dmx"',
     ])
+    attachment_path = args.export / "attachments.json"
+    if attachment_path.is_file():
+        attachments = json.loads(attachment_path.read_text(encoding="utf-8"))
+        def numbers(values):
+            if len(values) != 3 or not all(math.isfinite(float(value)) for value in values):
+                raise ValueError("Attachment coordinates must contain three finite numbers")
+            return " ".join(f"{float(value):.9g}" for value in values)
+        x, y, z = attachments["eye_position"]
+        lines.append(f'$eyeposition {numbers([y, -x, z])}')
+        for attachment in attachments["attachments"]:
+            if not all(re.fullmatch(r"[A-Za-z0-9_.-]+", attachment[key]) for key in ("name", "bone")):
+                raise ValueError("Invalid attachment or bone name")
+            lines.append(f'$attachment "{attachment["name"]}" "{attachment["bone"]}" '
+                         f'{numbers(attachment["position"])} rotate {numbers(attachment["rotation"])}')
     flex_path = args.export / "flexes.json"
     flexes = json.loads(flex_path.read_text(encoding="utf-8")) if flex_path.is_file() else []
     if flexes:

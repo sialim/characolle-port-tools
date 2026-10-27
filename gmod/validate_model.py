@@ -10,7 +10,8 @@ import struct
 from pathlib import Path
 
 
-def validate_model(path: Path, addon: Path | None = None, require_physics: bool = False) -> dict:
+def validate_model(path: Path, addon: Path | None = None, require_physics: bool = False,
+                   required_attachments: tuple[str, ...] = ()) -> dict:
     data = path.read_bytes()
     errors = []
 
@@ -44,6 +45,17 @@ def validate_model(path: Path, addon: Path | None = None, require_physics: bool 
     bone_count = integer(156)
     if not 0 < bone_count <= 256:
         errors.append(f"Unsupported bone count: {bone_count}")
+    attachments = []
+    for index in range(integer(240)):
+        offset = integer(244) + 92 * index
+        name, bone = string(offset + integer(offset)), integer(offset + 8)
+        matrix = list(struct.unpack_from("<12f", data, offset + 12))
+        if not 0 <= bone < bone_count or not all(math.isfinite(value) for value in matrix):
+            errors.append(f"Invalid attachment transform or bone: {name}")
+        attachments.append({"name": name, "bone": bone, "matrix": matrix})
+    missing = set(required_attachments) - {entry["name"] for entry in attachments}
+    if missing:
+        errors.append(f"Required model attachments are missing: {sorted(missing)}")
     flex_descriptors, flex_controllers, flex_rules = integer(260), integer(268), integer(276)
     if flex_controllers and not flex_rules:
         errors.append("Facial controllers have no compiled flex rules")
@@ -111,6 +123,7 @@ def validate_model(path: Path, addon: Path | None = None, require_physics: bool 
     return {"model": str(path), "bone_count": bone_count, "bodyparts": bodyparts,
             "flex_descriptors": flex_descriptors, "flex_controllers": flex_controllers, "flex_rules": flex_rules,
             "duplicate_flex_rules": duplicate_flex_rules,
+            "attachments": attachments, "eye_position": list(struct.unpack_from("<3f", data, 80)),
             "body_combinations": combinations, "vertex_bounds": bounds, "height": height,
             "materials": materials, "has_physics": physics_path.is_file(), "physics_solids": physics_solids,
             "errors": errors, "passed": not errors}
