@@ -46,11 +46,14 @@ eye_holder.parent_bone = "eye_L"
 eye_holder.matrix_world = Matrix.Translation((0.4, 0.3, 2.6))
 bpy.context.view_layer.update()
 expected = {obj.name: obj.matrix_world.copy() for obj in (holder, eye_holder)}
+expected_tails = {bone.name: head.matrix_world @ bone.tail_local for bone in head.data.bones}
 
 report = exporter.prepare_single_armature("02")
 assert holder.parent == body and holder.parent_type == "BONE" and holder.parent_bone == "head"
 assert eye_holder.parent == body and eye_holder.parent_type == "BONE" and eye_holder.parent_bone == "eye_L"
 assert body.data.bones["face_root"].parent.name == "head"
+for name, position in expected_tails.items():
+    assert (body.matrix_world @ body.data.bones[name].tail_local - position).length < 0.00001
 for obj in (holder, eye_holder):
     error = max(abs(obj.matrix_world[row][col] - expected[obj.name][row][col]) for row in range(4) for col in range(4))
     assert error < 0.00001, (obj.name, error)

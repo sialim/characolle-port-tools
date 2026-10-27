@@ -266,6 +266,22 @@ normalizes them to 61.2 units. Build a new clothed preview path and inspect it i
 game before replacing any working package. Recovery and compilation alone do
 not verify appearance, facial posing or physics.
 
+If an old compiled head or its facial targets are damaged,
+`blender/rebuild_recovered_head.py` replaces the head from an original SB3 FBX
+and matching XA while retaining the recovered body and outfit vertices. It
+adds eye bones and the existing pupil approximation, restores face-part links,
+and writes a new scene, manifest and source-hash receipt. Use `--manifest`,
+`--head-fbx`, `--head-xa` and a new `--output` directory. The default
+`--source-scale 400` matches these preserved compiled families; verify the
+coordinate relationship before using it on another export.
+
+XA morphs are assigned by the reference vertex count for each clip. Face and
+face-parts can share the XX frame name `P_face` while occupying different FBX
+submeshes, sometimes in reverse order. Assigning both to the largest mesh
+deforms the face. Ambiguous or inconsistent counts now stop the import. Bone
+copies also retain their transformed lengths so small head rigs survive export
+normalization without shifting skinned hair.
+
 The compiled model should be visually checked in GMod for bodygroup
 combinations, eye-bone posing, flex names, and texture coverage. The generated
 addon contains only build output; source game packages and extracted assets stay

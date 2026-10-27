@@ -61,6 +61,8 @@ def copy_bones(canonical: bpy.types.Object, source: bpy.types.Object) -> int:
             copy_one(source_bone.parent.name)
         edit_bone = canonical.data.edit_bones.new(name)
         edit_bone.matrix = inverse @ source.matrix_world @ source_bone.matrix_local
+        edit_bone.length = max(((inverse @ source.matrix_world).to_3x3()
+                                @ (source_bone.tail_local - source_bone.head_local)).length, 0.000001)
         edit_bone.use_connect = False
         edit_bone.use_deform = source_bone.use_deform
         if source_bone.parent:
@@ -763,7 +765,7 @@ def main() -> None:
     aliases = dict(manifest.get("flex_aliases", {}))
     if any(target not in head_flexes or source not in head_flexes for target, source in aliases.items()):
         raise ValueError("Manifest facial links reference absent exported shape keys")
-    if face and face.data.shape_keys:
+    if face and face.type == "MESH" and face.data.shape_keys:
         face_keys = list(face.data.shape_keys.key_blocks)[1:]
         for entry in manifest.get("head_objects", []):
             obj = bpy.data.objects[entry["name"]]

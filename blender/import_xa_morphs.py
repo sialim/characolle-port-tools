@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def find_mesh(mesh_name: str) -> bpy.types.Object:
+def find_mesh(mesh_name: str, vertex_count: int | None = None) -> bpy.types.Object:
     candidates = [
         obj
         for obj in bpy.data.objects
@@ -31,8 +31,22 @@ def find_mesh(mesh_name: str) -> bpy.types.Object:
     ]
     if not candidates:
         raise RuntimeError(f"Could not find imported mesh for {mesh_name}")
+    if vertex_count is not None:
+        candidates = [obj for obj in candidates if len(obj.data.vertices) == vertex_count]
+        if len(candidates) != 1:
+            raise RuntimeError(f"Expected one {mesh_name} submesh with {vertex_count} vertices; found {len(candidates)}")
+        return candidates[0]
     candidates.sort(key=lambda obj: (len(obj.data.vertices), obj.name))
     return candidates[-1]
+
+
+def find_clip_mesh(mesh_name: str, data: dict, clip_name: str) -> bpy.types.Object:
+    clip = next(item for item in data["clips"] if item["name"] == clip_name)
+    frames = {item["name"]: item for item in data["keyframes"]}
+    counts = {len(frames[ref["name"]]["positions"]) for ref in clip["keyframes"]}
+    if len(counts) != 1:
+        raise RuntimeError(f"{clip_name} has inconsistent reference vertex counts: {sorted(counts)}")
+    return find_mesh(mesh_name, counts.pop())
 
 
 def relink_images(root: Path | None) -> int:
@@ -119,19 +133,21 @@ def main() -> None:
     mesh_names = args.mesh or sorted({clip["mesh"] for clip in data["clips"]})
     created = 0
     processed = []
+    scaled = set()
     for mesh_name in mesh_names:
-        target = find_mesh(mesh_name)
-        if args.scale != 1.0:
-            target.scale *= args.scale
         clips = [
             clip["name"]
             for clip in data["clips"]
             if clip["mesh"] == mesh_name and (not args.clip or clip["name"] in args.clip)
         ]
         for clip in clips:
+            target = find_clip_mesh(mesh_name, data, clip)
+            if args.scale != 1.0 and target.name not in scaled:
+                target.scale *= args.scale
+                scaled.add(target.name)
             created += add_clip_shape_keys(target, data, clip)
-        target["characolle_morph_source"] = str(args.morph_json)
-        target["characolle_morph_clips"] = clips
+            target["characolle_morph_source"] = str(args.morph_json)
+            target["characolle_morph_clips"] = [name for name in clips if find_clip_mesh(mesh_name, data, name) == target]
         processed.extend(f"{mesh_name}:{clip}" for clip in clips)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(args.output))
