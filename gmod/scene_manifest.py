@@ -49,6 +49,7 @@ def material_entry(material: bpy.types.Material | None) -> dict | None:
         "images": images,
         "base_texture": material.get("characolle_base_texture", ""),
         "overlay_texture": material.get("characolle_overlay_texture", ""),
+        "two_sided": bool(material.get("characolle_two_sided", False)),
     }
 
 

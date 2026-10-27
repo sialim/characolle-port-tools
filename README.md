@@ -201,6 +201,9 @@ center; the build validator checks that the attachment survived compilation and
 that the compiled eye center matches the export. These changes affect export
 staging only. Verify selection and both movement axes with the installed Eye
 Poser, since tool variants can use different bone conventions.
+Materials that need visible back faces, such as wing membranes, can set
+`characolle_two_sided` on the Blender material or `two_sided` in its manifest
+entry. The texture builder emits `$nocull 1` for those materials.
 
 For small intersections with the shared body, `gmod/split_manifest.py` accepts
 repeated `--clearance-mesh` arguments with exact outfit object names. The default

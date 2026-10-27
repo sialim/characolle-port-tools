@@ -105,11 +105,13 @@ def convert_textures(manifest: dict, roots: list[Path], vtfcmd: Path, addon: Pat
         normalized_material_path = material_path.replace("\\", "/").strip("/")
         base = f"{normalized_material_path}/{texture_stem}"
         alpha = '    "$translucent" "1"\n' if source.suffix.casefold() == ".tga" else ""
+        sides = '    "$nocull" "1"\n' if material.get("two_sided", False) else ""
         vmt.write_text(
             '"VertexLitGeneric"\n{\n'
             f'    "$basetexture" "{base}"\n'
             '    "$model" "1"\n'
             f'{alpha}'
+            f'{sides}'
             '}\n',
             encoding="utf-8",
             newline="\n",
