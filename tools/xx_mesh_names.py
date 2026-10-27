@@ -116,7 +116,7 @@ class Reader:
             self.frame(output, frame_name)
 
 
-def parse(path: Path) -> dict[str, object]:
+def parse(path: Path, textures_output: Path | None = None) -> dict[str, object]:
     data = path.read_bytes()
     format_buf = data[:5]
     first = format_buf[0]
@@ -150,7 +150,20 @@ def parse(path: Path) -> dict[str, object]:
         name = reader.name()
         reader.read(4 + 4 * 7 + 1)
         image_size = reader.i32()
-        reader.read(image_size)
+        image = reader.read(image_size)
+        if textures_output is not None:
+            if not name or name in {".", ".."} or any(c in name for c in '/\\:'):
+                raise ValueError(f"Unsafe embedded texture name: {name!r}")
+            if Path(name).suffix.lower() == ".bmp":
+                if len(image) < 2:
+                    raise ValueError(f"Truncated embedded bitmap: {name}")
+                image = b"BM" + image[2:]
+            textures_output.mkdir(parents=True, exist_ok=True)
+            destination = textures_output / name
+            if destination.exists() and destination.read_bytes() != image:
+                raise FileExistsError(f"Refusing to replace a different texture: {destination}")
+            if not destination.exists():
+                destination.write_bytes(image)
         textures.append({"index": index, "name": name, "size": image_size})
 
     return {
@@ -167,8 +180,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path, nargs="+")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--textures-output", type=Path, help="Extract embedded images into one directory per XX file")
     args = parser.parse_args()
-    result = {str(path): parse(path) for path in args.input}
+    result = {str(path): parse(path, args.textures_output / path.stem if args.textures_output else None) for path in args.input}
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(text, encoding="utf-8")

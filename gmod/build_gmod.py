@@ -157,6 +157,9 @@ def write_spawnlist(addon: Path, model: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    for name in ("manifest", "qc", "gmod", "vtfcmd", "addon", "package"):
+        setattr(args, name, getattr(args, name).resolve())
+    args.textures = [path.resolve() for path in args.textures]
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     material_path = re.sub(r"^materials[\\/]?", "", manifest.get("material_path", "")) or f"models/characolle/{manifest['character'].lower()}"
     qc_text = args.qc.read_text(encoding="utf-8")

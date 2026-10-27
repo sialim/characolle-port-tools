@@ -234,6 +234,38 @@ python gmod/generate_qc.py --manifest C:\work\Kud_manifest.json --export C:\work
 python gmod/build_gmod.py --manifest C:\work\Kud_manifest.json --qc C:\work\Kud_export\Kud.qc --gmod F:\SteamLibrary\steamapps\common\GarrysMod --vtfcmd C:\tools\VTFCmd.exe --textures C:\exports\Kud --textures C:\exports\Kud\head_textures --addon C:\work\characolle_kud --package C:\work\characolle_kud.gma
 ```
 
+### Recovering missing outfit scenes
+
+`gmod/recover_compiled.py` can recover an outfit from a preserved MDL, VVD and
+DX90 VTX family using an external [SourceIO checkout](https://github.com/REDxEYE/SourceIO)
+in a directory named `SourceIO`. It creates a new Blender scene and export
+manifest with the compiled meshes, UVs, weights and surviving facial targets.
+It records source hashes and the importer revision, and refuses to overwrite an
+existing recovery. The original Blender collections, editable modifiers and
+uncompiled morphs cannot be reconstructed from these files.
+
+Original XX files can restore texture references and embedded images:
+
+```text
+python tools/xx_mesh_names.py C:\extracted\c03_02_00_00.xx C:\extracted\c03_02_02_00.xx C:\extracted\c03_02_10.xx --output C:\work\materials.json --textures-output C:\work\textures
+blender --background --python gmod/recover_compiled.py -- --input C:\backup\ameri_layer_00.mdl --sourceio C:\tools\SourceIO --output C:\work\ameri_recovered --character Ameri --model-name characolle/ameri_recovered --material-index C:\work\materials.json --texture-root C:\work\textures --mesh-prefix c03_02 --morph-source C:\extracted\c03_02_10.xa
+```
+
+The XX extractor restores BMP signatures, keeps original image bytes otherwise,
+rejects unsafe names, and refuses to overwrite different images. Recovery reports
+unresolved materials. Check those before building. Matching `Parts_top` and
+`Parts_bottom` XA expression slots restore face-part links through the manifest's
+`flex_aliases`; conflicting slots are rejected. Source Tools export collections
+receive exact filenames even when imported collections already use those names.
+The export stage also avoids mesh/bone name collisions and attaches detached
+weighted head roots to `o01_J_Head`, retaining the fitted rest geometry. Damaged
+geometry already present in an old compiled model still needs source repair.
+
+Recovered scenes retain compiled coordinates until the normal export stage
+normalizes them to 61.2 units. Build a new clothed preview path and inspect it in
+game before replacing any working package. Recovery and compilation alone do
+not verify appearance, facial posing or physics.
+
 The compiled model should be visually checked in GMod for bodygroup
 combinations, eye-bone posing, flex names, and texture coverage. The generated
 addon contains only build output; source game packages and extracted assets stay

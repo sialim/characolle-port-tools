@@ -177,6 +177,47 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
             "removed_armatures": len(old_armatures), "restored_rigid_attachments": restored_attachments}
 
 
+def attach_recovered_head(manifest: dict) -> list[str]:
+    if not manifest.get("scene", {}).get("recovered_from_compiled"):
+        return []
+    objects = [bpy.data.objects[entry["name"]] for entry in manifest["head_objects"]]
+    armatures = {modifier.object for obj in objects for modifier in obj.modifiers
+                 if modifier.type == "ARMATURE" and modifier.object}
+    if len(armatures) != 1:
+        raise ValueError("Recovered head must use one armature")
+    armature = armatures.pop()
+    if "o01_J_Head" not in armature.data.bones:
+        raise ValueError("Recovered head attachment bone is missing")
+    body_root = armature.data.bones["o01_J_Head"]
+    while body_root.parent:
+        body_root = body_root.parent
+    roots = set()
+    for obj in objects:
+        used = {group.group for vertex in obj.data.vertices for group in vertex.groups if group.weight > 0}
+        for index in used:
+            bone = armature.data.bones.get(obj.vertex_groups[index].name)
+            if bone is None:
+                continue
+            while bone.parent:
+                bone = bone.parent
+            if bone != body_root:
+                roots.add(bone.name)
+    if not roots:
+        return []
+    bpy.ops.object.select_all(action="DESELECT")
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="EDIT")
+    for name in sorted(roots):
+        bone = armature.data.edit_bones[name]
+        matrix = bone.matrix.copy()
+        bone.parent = armature.data.edit_bones["o01_J_Head"]
+        bone.use_connect = False
+        bone.matrix = matrix
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return sorted(roots)
+
+
 def prune_weights(max_influences: int) -> int:
     changed = 0
     for obj in bpy.data.objects:
@@ -298,6 +339,9 @@ def simplify_mantle_bones() -> dict:
 
 
 def temporary_collection(name: str, objects: list[bpy.types.Object]) -> bpy.types.Collection:
+    existing = bpy.data.collections.get(name)
+    if existing is not None:
+        existing.name = name + "__source"
     collection = bpy.data.collections.new(name)
     bpy.context.scene.collection.children.link(collection)
     for obj in objects:
@@ -586,7 +630,26 @@ def export_collection(collection: bpy.types.Collection, output: Path, material_p
     scene.vs.material_path = material_path
     scene.vs.smd_format = "SOURCE"
     scene.vs.up_axis = "Z"
-    bpy.ops.export_scene.smd(collection=collection.name, export_scene=False)
+    renamed = []
+    for obj in collection.objects:
+        if obj.type != "MESH":
+            continue
+        bones = {bone.name for modifier in obj.modifiers if modifier.type == "ARMATURE" and modifier.object
+                 for bone in modifier.object.data.bones}
+        if obj.name in bones:
+            original = obj.name
+            obj.name = "CC_EXPORT_" + obj.name
+            renamed.append((obj.name, original))
+    try:
+        bpy.ops.export_scene.smd(collection=collection.name, export_scene=False)
+    finally:
+        for temporary, original in renamed:
+            obj = bpy.data.objects.get(temporary)
+            if obj is not None:
+                obj.name = original
+    suffix = ".dmx" if export_format == "DMX" else ".smd"
+    if not (output / (collection.name + suffix)).is_file():
+        raise RuntimeError(f"Source Tools did not write the requested mesh: {collection.name + suffix}")
 
 
 def create_physics(manifest: dict, output: Path, height: float) -> bpy.types.Object:
@@ -677,6 +740,7 @@ def main() -> None:
         from add_eye_controls import add_eye_controls
         eye_controls_added = add_eye_controls()
     staging = prepare_single_armature(args.canonical_layer)
+    staging["recovered_head_roots_attached"] = attach_recovered_head(manifest)
     staging["eye_controls_added"] = eye_controls_added
     if not args.keep_mantle_bones:
         staging.update(simplify_mantle_bones())
@@ -696,7 +760,9 @@ def main() -> None:
                    for key in bpy.data.objects[entry["name"]].data.shape_keys.key_blocks if key.name != "Basis"]
     (args.output / "flexes.json").write_text(json.dumps(head_flexes, indent=2), encoding="utf-8")
     face = bpy.data.objects.get("P_face")
-    aliases = {}
+    aliases = dict(manifest.get("flex_aliases", {}))
+    if any(target not in head_flexes or source not in head_flexes for target, source in aliases.items()):
+        raise ValueError("Manifest facial links reference absent exported shape keys")
     if face and face.data.shape_keys:
         face_keys = list(face.data.shape_keys.key_blocks)[1:]
         for entry in manifest.get("head_objects", []):
