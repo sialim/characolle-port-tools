@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -30,6 +31,14 @@ def parse_args() -> argparse.Namespace:
 def clean_image_name(value: str) -> str:
     value = re.sub(r"(\.[0-9]{3})+$", "", value)
     return Path(value).name
+
+
+def source_texture_stem(value: str) -> str:
+    original = Path(value).stem
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", original).casefold()
+    if stem != original.casefold():
+        stem += "_" + hashlib.sha256(original.encode("utf-8")).hexdigest()[:8]
+    return stem
 
 
 def material_entries(manifest: dict) -> dict[str, dict]:
@@ -75,21 +84,25 @@ def convert_textures(manifest: dict, roots: list[Path], vtfcmd: Path, addon: Pat
         if source is None:
             print(f"warning: source texture not found for {material_name}: {image_name}")
             continue
-        vtf_name = Path(image_name).stem + ".vtf"
+        texture_stem = source_texture_stem(image_name)
+        vtf_name = texture_stem + ".vtf"
         if vtf_name.casefold() not in converted:
             destination = output / vtf_name
-            previous_time = destination.stat().st_mtime_ns if destination.is_file() else None
+            generated = output / (source.stem + ".vtf")
+            previous_time = generated.stat().st_mtime_ns if generated.is_file() else None
             command = [str(vtfcmd), "-file", str(source), "-output", str(output), "-format", "DXT5", "-nothumbnail"]
             run([*command, "-silent"])
-            if not destination.is_file() or destination.stat().st_mtime_ns == previous_time:
+            if not generated.is_file() or generated.stat().st_mtime_ns == previous_time:
                 print(f"Retrying texture conversion at the nearest power-of-two size: {source.name}")
                 run([*command, "-resize", "-rmethod", "NEAREST", "-rfilter", "CATROM"])
-            if not destination.is_file() or destination.stat().st_mtime_ns == previous_time:
-                raise RuntimeError(f"VTFCmd did not produce the requested texture: {destination}")
+            if not generated.is_file() or generated.stat().st_mtime_ns == previous_time:
+                raise RuntimeError(f"VTFCmd did not produce the requested texture: {generated}")
+            if generated != destination:
+                generated.replace(destination)
             converted.add(vtf_name.casefold())
         vmt = output / f"{material_name}.vmt"
         normalized_material_path = material_path.replace("\\", "/").strip("/")
-        base = f"{normalized_material_path}/{Path(image_name).stem}"
+        base = f"{normalized_material_path}/{texture_stem}"
         alpha = '    "$translucent" "1"\n' if source.suffix.casefold() == ".tga" else ""
         vmt.write_text(
             '"VertexLitGeneric"\n{\n'

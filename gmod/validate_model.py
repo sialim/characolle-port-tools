@@ -100,6 +100,8 @@ def validate_model(path: Path, addon: Path | None = None, require_physics: bool 
             errors.append(f"Missing VMT for compiled material: {name}")
             continue
         match = re.search(r'"\$basetexture"\s+"([^"]+)"', vmt.read_text(encoding="utf-8"), re.IGNORECASE)
+        if match is not None and "." in Path(match.group(1)).name:
+            errors.append(f"Source texture basename contains a period: {match.group(1)}")
         if match is None or not (addon / "materials" / f"{match.group(1)}.vtf").is_file():
             errors.append(f"Missing base texture referenced by {vmt.name}")
     return {"model": str(path), "bone_count": bone_count, "bodyparts": bodyparts,

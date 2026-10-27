@@ -8,7 +8,7 @@ from pathlib import Path
 
 GMOD = Path(__file__).resolve().parents[1] / "gmod"
 sys.path.insert(0, str(GMOD))
-from build_gmod import material_entries
+from build_gmod import material_entries, source_texture_stem
 from bundle_manifest import bundle
 
 
@@ -62,6 +62,12 @@ class QcGenerationTests(unittest.TestCase):
         self.assertEqual(result["bodygroups"][0]["meshes"], meshes)
         self.assertEqual(set(material_entries(result)), {f"torso_{i}" for i in range(12)})
         self.assertEqual(len(source["bodygroups"]), 12)
+
+    def test_texture_names_cannot_be_interpreted_as_extensions(self):
+        self.assertEqual(source_texture_stem("skin.bmp"), "skin")
+        dotted = source_texture_stem("c00_01_10._kacyu.bmp")
+        self.assertNotIn(".", dotted)
+        self.assertNotEqual(dotted, source_texture_stem("c00_01_10__kacyu.bmp"))
 
 
 if __name__ == "__main__":
