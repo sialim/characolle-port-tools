@@ -89,13 +89,16 @@ class QcGenerationTests(unittest.TestCase):
             (root / "source.json").write_text(json.dumps(source))
             command = [sys.executable, str(GMOD / "split_manifest.py"), "--input", str(root / "source.json"),
                        "--output", str(root / "outfit.json"), "--layer", "01",
-                       "--exclude-mesh", "duplicate_skin", "--clearance-mesh", "shirt"]
+                       "--exclude-mesh", "duplicate_skin", "--clearance-mesh", "shirt",
+                       "--clearance-face-iterations", "8", "--clearance-subdivide", "1"]
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             outfit = json.loads((root / "outfit.json").read_text())
             self.assertEqual(outfit["base_objects"], source["base_objects"])
             self.assertEqual([group["name"] for group in outfit["bodygroups"]], ["shirt"])
             self.assertEqual(outfit["outfit_clearance"]["meshes"], ["shirt"])
+            self.assertEqual(outfit["outfit_clearance"]["face_iterations"], 8)
+            self.assertEqual(outfit["outfit_clearance"]["subdivide"], 1)
             result = subprocess.run([*command, "--clearance-mesh", "missing"], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing", result.stderr)

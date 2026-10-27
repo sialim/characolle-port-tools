@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import bpy
+import bmesh
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
 
@@ -393,63 +394,189 @@ def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
             "normalized_meshes": len(objects), "maximum_geometry_error": maximum_error}
 
 
-def apply_outfit_clearance(manifest: dict) -> dict:
-    settings = manifest.get("outfit_clearance")
-    if not settings:
-        return {}
+def clearance_pass(manifest: dict, settings: dict) -> dict:
     distance = float(settings["distance"])
     maximum = float(settings["max_correction"])
-    if not 0 < distance <= 0.5 or not distance <= maximum <= 2:
-        raise ValueError("Outfit clearance must be 0–0.5 units with a correction limit up to 2 units")
+    iterations = int(settings.get("face_iterations", 0))
+    subdivisions = int(settings.get("subdivide", 0))
+    if (not 0 < distance <= 0.5 or not distance <= maximum <= 2
+            or not 0 <= iterations <= 16 or subdivisions not in (0, 1)):
+        raise ValueError("Invalid garment distance, correction limit or sampling iterations")
     entries = [mesh for group in manifest.get("bodygroups", [])
                for mesh in (group.get("meshes") or [group["mesh"]])]
     available = {entry["name"] for entry in entries}
     names = list(dict.fromkeys(settings["meshes"]))
-    if set(names) - available:
-        raise ValueError("Clearance can only affect selected outfit meshes")
+    references = list(dict.fromkeys(settings.get("reference_meshes", [])))
+    if (set(names) | set(references)) - available:
+        raise ValueError("Clearance can only use selected outfit meshes")
+    if set(names) & set(references):
+        raise ValueError("An outfit mesh cannot be its own clearance reference")
+    vertex_counts = {}
+    for name in names:
+        obj = bpy.data.objects[name]
+        vertex_counts[name] = len(obj.data.vertices)
+        if subdivisions:
+            if obj.data.shape_keys:
+                raise ValueError(f"Clearance subdivision cannot discard garment shape keys: {name}")
+            if len(obj.data.vertices) * 4 > 60000:
+                raise ValueError(f"Clearance subdivision would exceed the export vertex budget: {name}")
+            geometry = bmesh.new()
+            geometry.from_mesh(obj.data)
+            bmesh.ops.subdivide_edges(geometry, edges=list(geometry.edges), cuts=1, use_grid_fill=True)
+            geometry.to_mesh(obj.data)
+            geometry.free()
+            obj.data.update()
     bpy.context.view_layer.update()
     graph = bpy.context.evaluated_depsgraph_get()
-    points, faces = [], []
-    for entry in manifest["base_objects"]:
-        obj = bpy.data.objects[entry["name"]].evaluated_get(graph)
-        start = len(points)
-        points.extend(obj.matrix_world @ vertex.co for vertex in obj.data.vertices)
-        faces.extend(tuple(start + index for index in face.vertices) for face in obj.data.polygons)
-    surface = BVHTree.FromPolygons(points, faces)
+
+    def surface(object_names):
+        points, faces = [], []
+        for name in object_names:
+            obj = bpy.data.objects[name].evaluated_get(graph)
+            start = len(points)
+            points.extend(obj.matrix_world @ vertex.co for vertex in obj.data.vertices)
+            faces.extend(tuple(start + index for index in face.vertices) for face in obj.data.polygons)
+        return BVHTree.FromPolygons(points, faces)
+
+    surfaces = [surface([entry["name"] for entry in manifest["base_objects"]])]
+    surfaces.extend(surface([name]) for name in references)
+
+    def query(collider, point):
+        nearest, normal, index, separation = collider.find_nearest(point, maximum + distance)
+        if nearest is not None and collider is not surfaces[0] and settings.get("orient_references"):
+            body_point, body_normal, _, _ = surfaces[0].find_nearest(nearest, maximum + distance)
+            if body_point is not None and normal.dot(body_normal) < 0:
+                normal = -normal
+        return nearest, normal, index, separation
+
+    def contact(point, facing=None, only_base=False):
+        result = Vector((0, 0, 0))
+        selected = None
+        for collider in surfaces[:1] if only_base else surfaces:
+            nearest, normal, _, separation = query(collider, point)
+            if nearest is None:
+                continue
+            signed = (point - nearest).dot(normal)
+            if facing is not None:
+                alignment = normal.dot(facing)
+                if settings.get("sample_backfaces"):
+                    alignment = abs(alignment)
+                if alignment < 0.2 or abs(signed) < separation * 0.8:
+                    continue
+            correction = distance - signed
+            if correction > result.length and correction > 0.00001:
+                result = normal * correction
+                selected = collider
+        return result, selected
+
     report = {}
     for name in names:
         obj = bpy.data.objects[name]
         evaluated = obj.evaluated_get(graph)
-        if len(evaluated.data.vertices) != len(obj.data.vertices):
-            raise ValueError(f"Clearance requires unchanged vertex topology: {name}")
-        inverse = obj.matrix_world.inverted().to_3x3()
-        changes, limited = {}, 0
         basis = obj.data.shape_keys.key_blocks[0].data if obj.data.shape_keys else obj.data.vertices
-        for index, vertex in enumerate(basis):
-            point = obj.matrix_world @ vertex.co
-            if (evaluated.matrix_world @ evaluated.data.vertices[index].co - point).length > 0.0001:
-                raise ValueError(f"Clearance requires an unposed outfit: {name}")
-            nearest, normal, _, _ = surface.find_nearest(point, maximum + distance)
-            if nearest is None:
-                continue
-            signed = (point - nearest).dot(normal)
-            correction = distance - signed
-            if correction <= 0.00001:
-                continue
-            if correction > maximum:
-                limited += 1
-                continue
-            changes[index] = inverse @ (normal * correction)
+        if len(evaluated.data.vertices) != len(basis):
+            raise ValueError(f"Clearance requires unchanged vertex topology: {name}")
+        original = [obj.matrix_world @ vertex.co for vertex in basis]
+        if any((evaluated.matrix_world @ evaluated.data.vertices[i].co - point).length > 0.0001
+               for i, point in enumerate(original)):
+            raise ValueError(f"Clearance requires an unposed outfit: {name}")
+        points = [point.copy() for point in original]
+        limited = set()
+        protected = set()
+
+        def move(proposals):
+            moved = 0
+            for index, delta in proposals.items():
+                if delta.length <= 0.00001:
+                    continue
+                candidate = points[index] + delta
+                nearest, normal, _, _ = query(surfaces[0], candidate)
+                if nearest is not None:
+                    before, before_normal, _, _ = query(surfaces[0], points[index])
+                    before_signed = (points[index] - before).dot(before_normal) if before is not None else 0
+                    if (candidate - nearest).dot(normal) < min(0, before_signed) - 0.002:
+                        protected.add(index)
+                        continue
+                if (candidate - original[index]).length > maximum:
+                    limited.add(index)
+                    continue
+                points[index] = candidate
+                moved += 1
+            return moved
+
+        move({index: contact(point, only_base=True)[0] for index, point in enumerate(points)})
+        move({index: contact(point)[0] for index, point in enumerate(points)})
+
+        def face_samples():
+            edge_normals = {}
+            for face in obj.data.polygons:
+                indices = tuple(face.vertices)
+                normal = (points[indices[1]] - points[indices[0]]).cross(
+                    points[indices[2]] - points[indices[0]]).normalized()
+                yield indices, normal
+                for a, b in zip(indices, indices[1:] + indices[:1]):
+                    edge = tuple(sorted((a, b)))
+                    edge_normals[edge] = edge_normals.get(edge, Vector((0, 0, 0))) + normal
+            for edge, normal in edge_normals.items():
+                yield edge, normal.normalized()
+
+        completed = 0
+        for iteration in range(iterations):
+            proposals = {}
+            for indices, normal in face_samples():
+                center = sum((points[index] for index in indices), Vector((0, 0, 0))) / len(indices)
+                delta, collider = contact(center, normal)
+                if delta.length < 0.001:
+                    continue
+                directions = []
+                for index in indices:
+                    nearest, outward, _, _ = query(collider, points[index])
+                    if nearest is not None:
+                        alignment = outward.dot(delta.normalized())
+                        if alignment > 0.15:
+                            directions.append((index, outward, alignment))
+                for index, outward, alignment in directions:
+                    amount = min(0.15, delta.length * 0.65 * len(indices) / len(directions) / alignment)
+                    proposal = outward * amount
+                    if index not in proposals or proposal.length > proposals[index].length:
+                        proposals[index] = proposal
+            completed = iteration + 1
+            if not move(proposals):
+                break
+            move({index: contact(point)[0] for index, point in enumerate(points)})
+        unresolved = 0
+        if iterations:
+            for indices, normal in face_samples():
+                center = sum((points[index] for index in indices), Vector((0, 0, 0))) / len(indices)
+                if contact(center, normal)[0].length > distance + 0.002:
+                    unresolved += 1
+        inverse = obj.matrix_world.inverted().to_3x3()
+        changes = {i: inverse @ (point - original[i]) for i, point in enumerate(points)
+                   if (point - original[i]).length > 0.00001}
         coordinates = ([key.data for key in obj.data.shape_keys.key_blocks]
                        if obj.data.shape_keys else [obj.data.vertices])
         for data in coordinates:
             for index, delta in changes.items():
                 data[index].co += delta
         obj.data.update()
-        report[name] = {"moved_vertices": len(changes), "limited_vertices": limited,
-                        "maximum_correction": max((delta.length for delta in changes.values()), default=0)}
+        report[name] = {"moved_vertices": len(changes), "limited_vertices": len(limited),
+                        "maximum_correction": max(((points[i] - original[i]).length for i in changes), default=0),
+                        "face_iterations": completed, "unresolved_samples": unresolved,
+                        "vertices_before": vertex_counts[name], "vertices_after": len(basis),
+                        "protected_vertices": len(protected)}
     bpy.context.view_layer.update()
-    return {"distance": distance, "max_correction": maximum, "meshes": report}
+    return {"distance": distance, "max_correction": maximum,
+            "reference_meshes": references, "meshes": report}
+
+
+def apply_outfit_clearance(manifest: dict) -> dict:
+    settings = manifest.get("outfit_clearance")
+    if not settings:
+        return {}
+    report = clearance_pass(manifest, settings)
+    if settings.get("layers"):
+        report["layers"] = [clearance_pass(manifest, layer) for layer in settings["layers"]]
+    return report
 
 
 def export_collection(collection: bpy.types.Collection, output: Path, material_path: str, export_format: str) -> None:
@@ -561,6 +688,7 @@ def main() -> None:
         raise ValueError("Outfit clearance requires normalized Source units")
     staging["outfit_clearance"] = apply_outfit_clearance(manifest)
     if staging["outfit_clearance"]:
+        staging["post_clearance_pruned_vertices"] = prune_weights(args.max_influences)
         staging["post_clearance_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)
     head_flexes = [key.name for entry in manifest.get("head_objects", [])

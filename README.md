@@ -205,6 +205,22 @@ value. Check the result in game; this does not replace fitting large differences
 `--exclude-mesh` can omit confirmed duplicate outfit parts. Some base bodies omit
 lower legs or hands, so retain those outfit skin parts unless coverage is verified.
 
+Long garment faces can cross the body even when their vertices have clearance.
+`--clearance-subdivide 1` adds one subdivision level to explicitly selected
+garments, interpolating UVs and weights. It rejects meshes with shape keys rather
+than discarding them. `--clearance-face-iterations 8` can also check face centers
+and edge midpoints, with all movement still bounded by the correction limit.
+New weights are reduced to Source's influence limit before export.
+
+An outfit manifest can add ordered `layers` inside `outfit_clearance` to separate
+an outer collar from an inner shirt. Each layer accepts `meshes`,
+`reference_meshes`, `distance`, `max_correction`, `subdivide`, and `face_iterations`.
+Optional `orient_references: true` aligns reference normals with the nearby body;
+`sample_backfaces: true` includes reversed garment faces in sampling. Layers retain
+the base body as a protected surface. Reports include unresolved samples and
+vertices stopped by the movement or body-protection limits. Inspect those cases
+in game before treating the outfit as finished.
+
 VTFCmd can return success without writing a texture when the source dimensions
 are unsupported. The builder checks each output and, when needed, retries at the
 nearest power-of-two size. Original images are kept unchanged.

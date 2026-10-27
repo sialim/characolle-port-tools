@@ -19,6 +19,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clearance-mesh", action="append", default=[])
     parser.add_argument("--clearance", type=float, default=0.06)
     parser.add_argument("--clearance-max-correction", type=float, default=1.0)
+    parser.add_argument("--clearance-face-iterations", type=int, default=0)
+    parser.add_argument("--clearance-subdivide", type=int, choices=(0, 1), default=0)
     return parser.parse_args()
 
 
@@ -78,7 +80,9 @@ def main() -> None:
     }
     if args.clearance_mesh:
         result["outfit_clearance"] = {"meshes": args.clearance_mesh, "distance": args.clearance,
-                                      "max_correction": args.clearance_max_correction}
+                                      "max_correction": args.clearance_max_correction,
+                                      "face_iterations": args.clearance_face_iterations,
+                                      "subdivide": args.clearance_subdivide}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Wrote layer {layer} manifest with {len(outfit_groups)} bodygroups: {args.output}")
