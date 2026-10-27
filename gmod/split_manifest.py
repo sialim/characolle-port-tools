@@ -15,6 +15,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layer", required=True)
     parser.add_argument("--base-layer")
     parser.add_argument("--model-name")
+    parser.add_argument("--exclude-mesh", action="append", default=[])
+    parser.add_argument("--clearance-mesh", action="append", default=[])
+    parser.add_argument("--clearance", type=float, default=0.06)
+    parser.add_argument("--clearance-max-correction", type=float, default=1.0)
     return parser.parse_args()
 
 
@@ -47,6 +51,13 @@ def main() -> None:
         for entry in source.get("bodygroups", [])
         if entry.get("layer") == layer and entry["mesh"]["name"] not in base_names
     ]
+    outfit_names = {entry["mesh"]["name"] for entry in outfit_groups}
+    requested = set(args.exclude_mesh) | set(args.clearance_mesh)
+    if requested - outfit_names:
+        raise ValueError(f"Requested outfit meshes are missing: {sorted(requested - outfit_names)}")
+    if set(args.exclude_mesh) & set(args.clearance_mesh):
+        raise ValueError("An excluded mesh cannot also receive clearance")
+    outfit_groups = [entry for entry in outfit_groups if entry["mesh"]["name"] not in args.exclude_mesh]
     scene.update({
         "outfit_layer": layer,
         "base_body_layer": base_layer,
@@ -63,7 +74,11 @@ def main() -> None:
         "base_objects": base_objects,
         "head_objects": list(source.get("head_objects", [])),
         "bodygroups": outfit_groups,
+        "excluded_outfit_meshes": args.exclude_mesh,
     }
+    if args.clearance_mesh:
+        result["outfit_clearance"] = {"meshes": args.clearance_mesh, "distance": args.clearance,
+                                      "max_correction": args.clearance_max_correction}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Wrote layer {layer} manifest with {len(outfit_groups)} bodygroups: {args.output}")

@@ -195,6 +195,16 @@ keeps the other garment toggles separate and brings large outfits below the limi
 The exporter also adds eye controls in staging when the original head rig and eye
 markers are present but eye bones have not yet been created.
 
+For small intersections with the shared body, `gmod/split_manifest.py` accepts
+repeated `--clearance-mesh` arguments with exact outfit object names. The default
+clearance is 0.06 Source units, with a 1-unit correction limit. The exporter moves
+only those garment vertices away from the body surface, preserves relative shape
+keys, and records moved and limited vertices in its report. This operates on the
+export copy and requires an unposed outfit. Final height stays at the requested
+value. Check the result in game; this does not replace fitting large differences.
+`--exclude-mesh` can omit confirmed duplicate outfit parts. Some base bodies omit
+lower legs or hands, so retain those outfit skin parts unless coverage is verified.
+
 VTFCmd can return success without writing a texture when the source dimensions
 are unsupported. The builder checks each output and, when needed, retries at the
 nearest power-of-two size. Original images are kept unchanged.

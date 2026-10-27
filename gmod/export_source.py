@@ -10,6 +10,7 @@ from pathlib import Path
 
 import bpy
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 
 def parse_args() -> argparse.Namespace:
@@ -392,6 +393,65 @@ def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
             "normalized_meshes": len(objects), "maximum_geometry_error": maximum_error}
 
 
+def apply_outfit_clearance(manifest: dict) -> dict:
+    settings = manifest.get("outfit_clearance")
+    if not settings:
+        return {}
+    distance = float(settings["distance"])
+    maximum = float(settings["max_correction"])
+    if not 0 < distance <= 0.5 or not distance <= maximum <= 2:
+        raise ValueError("Outfit clearance must be 0–0.5 units with a correction limit up to 2 units")
+    entries = [mesh for group in manifest.get("bodygroups", [])
+               for mesh in (group.get("meshes") or [group["mesh"]])]
+    available = {entry["name"] for entry in entries}
+    names = list(dict.fromkeys(settings["meshes"]))
+    if set(names) - available:
+        raise ValueError("Clearance can only affect selected outfit meshes")
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    points, faces = [], []
+    for entry in manifest["base_objects"]:
+        obj = bpy.data.objects[entry["name"]].evaluated_get(graph)
+        start = len(points)
+        points.extend(obj.matrix_world @ vertex.co for vertex in obj.data.vertices)
+        faces.extend(tuple(start + index for index in face.vertices) for face in obj.data.polygons)
+    surface = BVHTree.FromPolygons(points, faces)
+    report = {}
+    for name in names:
+        obj = bpy.data.objects[name]
+        evaluated = obj.evaluated_get(graph)
+        if len(evaluated.data.vertices) != len(obj.data.vertices):
+            raise ValueError(f"Clearance requires unchanged vertex topology: {name}")
+        inverse = obj.matrix_world.inverted().to_3x3()
+        changes, limited = {}, 0
+        basis = obj.data.shape_keys.key_blocks[0].data if obj.data.shape_keys else obj.data.vertices
+        for index, vertex in enumerate(basis):
+            point = obj.matrix_world @ vertex.co
+            if (evaluated.matrix_world @ evaluated.data.vertices[index].co - point).length > 0.0001:
+                raise ValueError(f"Clearance requires an unposed outfit: {name}")
+            nearest, normal, _, _ = surface.find_nearest(point, maximum + distance)
+            if nearest is None:
+                continue
+            signed = (point - nearest).dot(normal)
+            correction = distance - signed
+            if correction <= 0.00001:
+                continue
+            if correction > maximum:
+                limited += 1
+                continue
+            changes[index] = inverse @ (normal * correction)
+        coordinates = ([key.data for key in obj.data.shape_keys.key_blocks]
+                       if obj.data.shape_keys else [obj.data.vertices])
+        for data in coordinates:
+            for index, delta in changes.items():
+                data[index].co += delta
+        obj.data.update()
+        report[name] = {"moved_vertices": len(changes), "limited_vertices": limited,
+                        "maximum_correction": max((delta.length for delta in changes.values()), default=0)}
+    bpy.context.view_layer.update()
+    return {"distance": distance, "max_correction": maximum, "meshes": report}
+
+
 def export_collection(collection: bpy.types.Collection, output: Path, material_path: str, export_format: str) -> None:
     scene = bpy.context.scene
     scene.vs.export_path = str(output)
@@ -497,6 +557,11 @@ def main() -> None:
     staging["renamed_shape_keys"] = clean_shape_names()
     if args.target_height is not None:
         staging["coordinate_normalization"] = normalize_export_transforms(manifest, args.target_height)
+    elif manifest.get("outfit_clearance"):
+        raise ValueError("Outfit clearance requires normalized Source units")
+    staging["outfit_clearance"] = apply_outfit_clearance(manifest)
+    if staging["outfit_clearance"]:
+        staging["post_clearance_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)
     head_flexes = [key.name for entry in manifest.get("head_objects", [])
                    if bpy.data.objects[entry["name"]].data.shape_keys

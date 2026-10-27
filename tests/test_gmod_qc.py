@@ -79,6 +79,27 @@ class QcGenerationTests(unittest.TestCase):
         self.assertNotIn(".", dotted)
         self.assertNotEqual(dotted, source_texture_stem("c00_01_10__kacyu.bmp"))
 
+    def test_outfit_fitting_is_explicit_and_preserves_shared_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = {"character": "Fixture", "scene": {"base_body_layer": "02"},
+                      "base_objects": [{"name": "BODY_02__P_body_0"}],
+                      "bodygroups": [{"name": name, "layer": "01", "mesh": {"name": name}}
+                                     for name in ["shirt", "duplicate_skin"]]}
+            (root / "source.json").write_text(json.dumps(source))
+            command = [sys.executable, str(GMOD / "split_manifest.py"), "--input", str(root / "source.json"),
+                       "--output", str(root / "outfit.json"), "--layer", "01",
+                       "--exclude-mesh", "duplicate_skin", "--clearance-mesh", "shirt"]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            outfit = json.loads((root / "outfit.json").read_text())
+            self.assertEqual(outfit["base_objects"], source["base_objects"])
+            self.assertEqual([group["name"] for group in outfit["bodygroups"]], ["shirt"])
+            self.assertEqual(outfit["outfit_clearance"]["meshes"], ["shirt"])
+            result = subprocess.run([*command, "--clearance-mesh", "missing"], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
