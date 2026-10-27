@@ -12,12 +12,14 @@ from build_gmod import material_entries
 
 
 class QcGenerationTests(unittest.TestCase):
-    def generate(self, count, *extra):
+    def generate(self, count, *extra, flexes=None):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         groups = [{"name": f"piece_{i}"} for i in range(count)]
         (root / "manifest.json").write_text(json.dumps({"character": "Fixture", "bodygroups": groups}))
+        if flexes is not None:
+            (root / "flexes.json").write_text(json.dumps(flexes))
         for name in ["base.dmx", "head.dmx", *[f"bg_{g['name']}.dmx" for g in groups]]:
             (root / name).touch()
         result = subprocess.run([sys.executable, str(GMOD / "generate_qc.py"), "--manifest", str(root / "manifest.json"),
@@ -42,6 +44,14 @@ class QcGenerationTests(unittest.TestCase):
         entries = material_entries(manifest)
         self.assertEqual(set(entries), {"body_02__skin", "body_00__skin"})
         self.assertNotEqual(entries["body_02__skin"]["images"], entries["body_00__skin"]["images"])
+
+    def test_head_compiles_facial_rules_and_linked_lashes(self):
+        result, qc = self.generate(1, flexes=["MeBaseToji", "NamidaBacetoji", "KuchiAkiA"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = qc.read_text()
+        self.assertIn('$model "head" "head.dmx" {\n', text)
+        self.assertIn('%KuchiAkiA = KuchiAkiA', text)
+        self.assertIn('%NamidaBacetoji = NamidaBacetoji + MeBaseToji', text)
 
 
 if __name__ == "__main__":

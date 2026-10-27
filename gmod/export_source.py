@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,7 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-influences", type=int, default=3)
     parser.add_argument("--keep-mantle-bones", action="store_true")
     parser.add_argument("--canonical-layer", choices=("00", "01", "02", "03", "04"))
-    parser.add_argument("--target-height", type=float, help="Normalize the exported character to this height in Source units")
+    parser.add_argument("--target-height", type=float, default=61.2, help="Export height in Source units (72 units reduced by 15%%)")
+    parser.add_argument("--physics", action="store_true", help="Export a jointed collision skeleton")
     return parser.parse_args(argv)
 
 
@@ -401,6 +402,80 @@ def export_collection(collection: bpy.types.Collection, output: Path, material_p
     bpy.ops.export_scene.smd(collection=collection.name, export_scene=False)
 
 
+def create_physics(manifest: dict, output: Path, height: float) -> bpy.types.Object:
+    """Build sixteen separate convex hulls, each rigidly weighted to one body joint."""
+    armature = next(mod.object for entry in manifest["base_objects"]
+                    for mod in bpy.data.objects[entry["name"]].modifiers if mod.type == "ARMATURE")
+    bones = armature.data.bones
+    unit = height / 61.2
+    vertices, faces, assignments, joints = [], [], [], []
+    box_faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+                 (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+
+    def position(name):
+        return armature.matrix_world @ bones[name].head_local
+
+    def hull(name, start, end, width, depth, limits):
+        direction = end - start
+        if direction.length < 0.01:
+            raise RuntimeError(f"Zero length collision segment: {name}")
+        axis = direction.normalized()
+        reference = Vector((0, 1, 0)) if abs(axis.y) < 0.9 else Vector((1, 0, 0))
+        across = axis.cross(reference).normalized() * width * unit
+        forward = axis.cross(across).normalized() * depth * unit
+        offset = len(vertices)
+        for center in (start, end):
+            vertices.extend([center-across-forward, center+across-forward,
+                             center+across+forward, center-across+forward])
+        faces.extend(tuple(offset+i for i in face) for face in box_faces)
+        assignments.append((name, list(range(offset, offset+8))))
+        joints.append({"bone": name, "limits": limits, "start": list(start), "end": list(end)})
+
+    def segment(name, child, width, depth, limits):
+        start, end = position(name), position(child)
+        delta = end-start
+        hull(name, start+delta*0.08, end-delta*0.08, width, depth, limits)
+
+    def hinge_limits(name, world_axis):
+        local_axis = bones[name].matrix_local.to_3x3().inverted() @ Vector(world_axis)
+        hinge = max(range(3), key=lambda index: abs(local_axis[index]))
+        return [(-125, 125) if index == hinge else (-8, 8) for index in range(3)]
+
+    moderate = [(-25, 25), (-25, 25), (-25, 25)]
+    hip = position("o01_J_Hip")
+    pelvis = (position("o01_J_UpLeg01_L") + position("o01_J_UpLeg01_R"))*0.5
+    hull("o01_J_Hip", pelvis-Vector((0, 0, 1.2*unit)), hip+Vector((0, 0, unit)), 3.6, 2.3, moderate)
+    segment("o01_J_Spin01", "o01_J_Spin04", 3.0, 2.0, moderate)
+    segment("o01_J_Spin04", "o01_J_Neck", 3.5, 2.0, moderate)
+    head = position("o01_J_Head")
+    hull("o01_J_Head", head+Vector((0, 0, 0.4*unit)), head+Vector((0, 0, 7*unit)),
+         3.4, 3.0, [(-45, 45), (-35, 35), (-50, 50)])
+    for side in ("L", "R"):
+        segment(f"o01_J_Arm01_{side}", f"o01_J_Hiji01_{side}", 1.2, 1.2, [(-80, 80)]*3)
+        segment(f"o01_J_Hiji01_{side}", f"o01_J_Hand_{side}", 0.95, 0.95,
+                hinge_limits(f"o01_J_Hiji01_{side}", (0, 0, 1)))
+        hand = position(f"o01_J_Hand_{side}")
+        finger = position(f"o01_J_Naka01_{side}")
+        hull(f"o01_J_Hand_{side}", hand, hand+(finger-hand)*1.7, 0.8, 0.5, [(-35, 35)]*3)
+        segment(f"o01_J_UpLeg01_{side}", f"o01_J_Hiza_{side}", 1.8, 1.9, [(-65, 65)]*3)
+        segment(f"o01_J_Hiza_{side}", f"o01_J_Foot01_{side}", 1.3, 1.3,
+                hinge_limits(f"o01_J_Hiza_{side}", (1, 0, 0)))
+        segment(f"o01_J_Foot01_{side}", f"o01_J_Toes_{side}", 1.25, 1.1, [(-30, 30)]*3)
+    mesh = bpy.data.meshes.new("physics")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.materials.append(bpy.data.materials.new("physics"))
+    mesh.update()
+    obj = bpy.data.objects.new("physics", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    for name, indices in assignments:
+        obj.vertex_groups.new(name=name).add(indices, 1.0, "REPLACE")
+    modifier = obj.modifiers.new("Armature", "ARMATURE")
+    modifier.object = armature
+    profile = {"rootbone": "o01_J_Hip", "mass": 45, "hulls": joints}
+    (output / "physics.json").write_text(json.dumps(profile, indent=2), encoding="utf-8")
+    return obj
+
+
 def main() -> None:
     args = parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -414,6 +489,10 @@ def main() -> None:
     if args.target_height is not None:
         staging["coordinate_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)
+    head_flexes = [key.name for entry in manifest.get("head_objects", [])
+                   if bpy.data.objects[entry["name"]].data.shape_keys
+                   for key in bpy.data.objects[entry["name"]].data.shape_keys.key_blocks if key.name != "Basis"]
+    (args.output / "flexes.json").write_text(json.dumps(head_flexes, indent=2), encoding="utf-8")
     exported = []
 
     def objects_from(entries: list[dict]) -> list[bpy.types.Object]:
@@ -432,6 +511,12 @@ def main() -> None:
         collection = temporary_collection(name, objects)
         export_collection(collection, args.output, args.material_path, args.format)
         exported.append(name + (".dmx" if args.format == "DMX" else ".smd"))
+
+    if args.physics:
+        physics = create_physics(manifest, args.output, args.target_height)
+        collection = temporary_collection("physics", [physics])
+        export_collection(collection, args.output, args.material_path, args.format)
+        exported.append("physics.dmx" if args.format == "DMX" else "physics.smd")
 
     report = {"character": manifest["character"], "format": args.format, "exported": exported, "staging": staging}
     args.report.parent.mkdir(parents=True, exist_ok=True)

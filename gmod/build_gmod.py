@@ -117,6 +117,23 @@ def copy_compiled_files(files: list[Path], gmod: Path, addon: Path) -> int:
     return len(files)
 
 
+def write_spawnlist(addon: Path, model: Path) -> None:
+    relative = model.relative_to(addon).as_posix()
+    identifier = re.sub(r"[^a-z0-9_]+", "_", relative.casefold())
+    destination = addon / "lua" / "autorun" / "client" / f"{identifier}.lua"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    model_literal = json.dumps(relative)
+    destination.write_text(
+        f'list.Set("CharaColleModels", {model_literal}, {{type="model", model={model_literal}}})\n'
+        'hook.Add("PopulatePropMenu", "CharaColleModels", function()\n'
+        '    local contents = {}\n'
+        '    for _, entry in SortedPairs(list.Get("CharaColleModels")) do\n'
+        '        contents[#contents + 1] = entry\n'
+        '    end\n'
+        '    spawnmenu.AddPropCategory("CharaColle", "CharaColle", contents, "icon16/user.png")\n'
+        'end)\n', encoding="utf-8", newline="\n")
+
+
 def main() -> None:
     args = parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -144,11 +161,13 @@ def main() -> None:
     model = next((path for path in files if path.suffix.casefold() == ".mdl"), None)
     if model is None:
         raise RuntimeError("StudioMDL produced no MDL file")
-    validation = validate_model(model, args.addon)
+    validation = validate_model(model, args.addon, bool(re.search(r'^\$collisionjoints\s', qc_text, re.MULTILINE | re.IGNORECASE)))
     validation_path = args.addon.parent / f"{args.addon.name}_validation.json"
     validation_path.write_text(json.dumps(validation, indent=2) + "\n", encoding="utf-8")
     if not validation["passed"]:
         raise RuntimeError(f"Compiled model failed validation: {validation['errors']}")
+    if validation["has_physics"]:
+        write_spawnlist(args.addon, args.addon / "models" / model.relative_to(args.gmod / "garrysmod" / "models"))
     if not args.skip_package:
         args.package.parent.mkdir(parents=True, exist_ok=True)
         run([str(args.gmod / "bin" / "gmad.exe"), "create", "-folder", str(args.addon), "-out", str(args.package)])

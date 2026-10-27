@@ -149,8 +149,9 @@ repeatable Source export:
    base meshes, head meshes, and one bodygroup entry per outfit mesh.
 2. `gmod/export_source.py` consolidates the armatures, rebinds weighted meshes,
    limits vertex influences, exports DMX files, and renames flexes for Source.
-   Use `--target-height 72` to flatten mesh and rig transforms into a measured
-   Source-unit height. This preserves nested eye attachments and checks sampled
+   Exports default to 61.2 Source units tall, a 15% reduction from the previous
+   72-unit target. Override this with `--target-height`. This flattens mesh and rig
+   transforms, preserves nested eye attachments, and checks sampled
    evaluated vertices before exporting. Keep QC scale at its default for these
    normalized exports; an additional `$scale 400` would multiply the height again.
    Mantle cloth bones are reduced to a torso-bound export representation because
@@ -159,20 +160,34 @@ repeatable Source export:
    bodygroups. Outfit entries start blank so they can be enabled independently.
    Pass `--outfit-visible` for an outfit model that starts fully dressed. The
    generator rejects bodygroup tables that overflow signed 32-bit storage.
+   The head uses a `$model` block with explicit facial rules from `flexes.json`.
+   Exporting it only as a bodygroup can leave named sliders without executable
+   rules in GMod. Matching eyelash morphs follow the face expression controls.
 4. `gmod/build_gmod.py` converts referenced textures with VTFCmd, writes VMTs,
    runs StudioMDL, collects the compiled files, and creates a GMA package.
    Before packaging, `gmod/validate_model.py` checks the compiled height,
    bodygroup bases, companion-file checksums, and packaged VMT/VTF references.
+   It rejects facial controllers with no compiled flex rules.
    This is an offline check; successful validation still requires an in-game
-   rendering and posing test. These QCs do not generate ragdoll physics.
+   rendering and posing test. Ragdoll builds also check the PHY checksum and
+   require between 1 and 32 physics solids.
+
+Pass `--physics` to both the exporter and QC generator to create a ragdoll.
+The exporter builds sixteen convex collision hulls for the pelvis, torso, head,
+arms, hands, legs, and feet. Each hull has one rigid bone assignment; the generated
+`physics.json` records the joint limits and mass for review. Elbows and knees use
+hinge limits chosen from the source bone orientation. Hair and outfit bones follow
+their existing parents. This is a starting collision rig; unusual outfits may need
+hull or joint-limit adjustments after an in-game test. Source Blender files retain
+their original size and fitted geometry.
 
 Example Kud commands:
 
 ```text
 blender --background --python gmod/scene_manifest.py -- --input C:\blends\Kud.blend --output C:\work\Kud_manifest.json --character Kud
-blender --background --python gmod/export_source.py -- --input C:\blends\Kud.blend --manifest C:\work\Kud_manifest.json --source-tools C:\tools\blender_source_tools_3.4.3 --output C:\work\Kud_export --report C:\work\Kud_export_report.json --material-path models/characolle/kud --format DMX
-python gmod/generate_qc.py --manifest C:\work\Kud_manifest.json --export C:\work\Kud_export --output C:\work\Kud_export\Kud.qc --material-path models/characolle/kud
-python gmod/build_gmod.py --manifest C:\work\Kud_manifest.json --qc C:\work\Kud_export\Kud.qc --gmod E:\SteamLibrary\steamapps\common\GarrysMod --vtfcmd C:\tools\VTFCmd.exe --textures C:\exports\Kud --textures C:\exports\Kud\head_textures --addon C:\work\characolle_kud --package C:\work\characolle_kud.gma
+blender --background --python gmod/export_source.py -- --input C:\blends\Kud.blend --manifest C:\work\Kud_manifest.json --source-tools C:\tools\blender_source_tools_3.4.3 --output C:\work\Kud_export --report C:\work\Kud_export_report.json --material-path models/characolle/kud --format DMX --physics
+python gmod/generate_qc.py --manifest C:\work\Kud_manifest.json --export C:\work\Kud_export --output C:\work\Kud_export\Kud.qc --material-path models/characolle/kud --outfit-visible --physics
+python gmod/build_gmod.py --manifest C:\work\Kud_manifest.json --qc C:\work\Kud_export\Kud.qc --gmod F:\SteamLibrary\steamapps\common\GarrysMod --vtfcmd C:\tools\VTFCmd.exe --textures C:\exports\Kud --textures C:\exports\Kud\head_textures --addon C:\work\characolle_kud --package C:\work\characolle_kud.gma
 ```
 
 The compiled model should be visually checked in GMod for bodygroup

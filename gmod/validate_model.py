@@ -10,7 +10,7 @@ import struct
 from pathlib import Path
 
 
-def validate_model(path: Path, addon: Path | None = None) -> dict:
+def validate_model(path: Path, addon: Path | None = None, require_physics: bool = False) -> dict:
     data = path.read_bytes()
     errors = []
 
@@ -27,9 +27,26 @@ def validate_model(path: Path, addon: Path | None = None) -> dict:
     if integer(76) != len(data):
         errors.append("MDL length does not match its header")
     checksum = integer(8)
+    physics_path = path.with_suffix(".phy")
+    physics_solids = 0
+    if physics_path.is_file():
+        blob = physics_path.read_bytes()
+        if len(blob) < 16:
+            errors.append("Truncated PHY header")
+        else:
+            size, identifier, physics_solids, physics_checksum = struct.unpack_from("<4i", blob)
+            if size != 16 or not 0 < physics_solids <= 32:
+                errors.append(f"Invalid PHY header or solid count: {physics_solids}")
+            if physics_checksum != checksum:
+                errors.append("PHY checksum does not match MDL")
+    elif require_physics:
+        errors.append("Ragdoll build is missing its PHY file")
     bone_count = integer(156)
     if not 0 < bone_count <= 256:
         errors.append(f"Unsupported bone count: {bone_count}")
+    flex_descriptors, flex_controllers, flex_rules = integer(260), integer(268), integer(276)
+    if flex_controllers and not flex_rules:
+        errors.append("Facial controllers have no compiled flex rules")
     combinations = 1
     bodyparts = []
     for index in range(integer(232)):
@@ -86,8 +103,9 @@ def validate_model(path: Path, addon: Path | None = None) -> dict:
         if match is None or not (addon / "materials" / f"{match.group(1)}.vtf").is_file():
             errors.append(f"Missing base texture referenced by {vmt.name}")
     return {"model": str(path), "bone_count": bone_count, "bodyparts": bodyparts,
+            "flex_descriptors": flex_descriptors, "flex_controllers": flex_controllers, "flex_rules": flex_rules,
             "body_combinations": combinations, "vertex_bounds": bounds, "height": height,
-            "materials": materials, "has_physics": path.with_suffix(".phy").is_file(),
+            "materials": materials, "has_physics": physics_path.is_file(), "physics_solids": physics_solids,
             "errors": errors, "passed": not errors}
 
 
@@ -96,8 +114,9 @@ def main() -> None:
     parser.add_argument("model", type=Path)
     parser.add_argument("--addon", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--require-physics", action="store_true")
     args = parser.parse_args()
-    result = validate_model(args.model, args.addon)
+    result = validate_model(args.model, args.addon, args.require_physics)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
