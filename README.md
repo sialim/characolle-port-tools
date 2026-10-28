@@ -330,6 +330,30 @@ The eye-center error should be near zero with neutral eye offsets; posed eyes
 deliberately move away from the fixed attachment. Inspect the rendered result
 alongside the snapshot.
 
+`gmod/lua/render_model.lua` draws one live entity into a render target and saves
+a PNG plus a JSON receipt under `garrysmod/data/characolle_port_checks`. It runs
+inside GMod without desktop input or moving the player's camera. Copy it to
+`garrysmod/lua/characolle_render_model.lua` and request a render from client Lua:
+
+```lua
+local entity = Entity(123) -- Use the owned test entity's actual index.
+entity:SetupBones()
+local target = entity:GetBoneMatrix(entity:LookupBone('o01_J_Head')):GetTranslation()
+include('characolle_render_model.lua')(entity, {
+    name = 'head_' .. os.time(),
+    origin = target + entity:GetAngles():Forward() * 38,
+    target = target,
+    inspect = include('characolle_inspect_model.lua')
+})
+```
+
+The game can remain unfocused. Keep it running and unpaused; if no render frame
+arrives within twenty seconds, the receipt reports a failure. Use a new output
+name for each capture. The helper restores the entity's draw flag, omits desktop
+overlays, and renders only the requested model against a plain background.
+These images verify the live model's appearance and pose. They do not show map
+collisions; inspect ragdoll motion and joint measurements separately in the world.
+
 ## First export targets
 
 Start with one outfit per character:
