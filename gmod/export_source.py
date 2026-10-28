@@ -104,6 +104,8 @@ def prepare_single_armature(canonical_layer: str | None = None) -> dict:
             ),
             None,
         )
+        if canonical is None:
+            raise RuntimeError(f"Missing requested body armature for layer {canonical_layer}")
     if canonical is None:
         canonical = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if canonical is None:
@@ -808,7 +810,10 @@ def main() -> None:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "blender"))
         from add_eye_controls import add_eye_controls
         eye_controls_added = add_eye_controls()
-    staging = prepare_single_armature(args.canonical_layer)
+    canonical_layer = args.canonical_layer or manifest.get("scene", {}).get("canonical_body_layer")
+    if canonical_layer is not None and canonical_layer not in {"00", "01", "02", "03", "04"}:
+        raise ValueError(f"Invalid manifest canonical body layer: {canonical_layer}")
+    staging = prepare_single_armature(canonical_layer)
     staging["recovered_head_roots_attached"] = attach_recovered_head(manifest)
     staging["eye_controls_added"] = eye_controls_added
     if not args.keep_mantle_bones:

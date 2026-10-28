@@ -78,3 +78,12 @@ assert new_body.data.bones["face_root"].parent.name == "head"
 error = max(abs(holder.matrix_world[row][col] - expected_world[row][col]) for row in range(4) for col in range(4))
 assert error < 0.00001, error
 print("PASS: switching body layers preserves the inherited head attachment")
+
+try:
+    exporter.prepare_single_armature("04")
+except RuntimeError as error:
+    assert "Missing requested body armature" in str(error)
+else:
+    raise AssertionError("A missing requested layer must not fall back to the saved rig")
+assert bpy.data.objects.get(new_body.name) == new_body
+print("PASS: a missing requested body layer cannot silently use another rig")

@@ -156,6 +156,9 @@ repeatable Source export:
    normalized exports; an additional `$scale 400` would multiply the height again.
    Mantle cloth bones are reduced to a torso-bound export representation because
    Source models have a 256-bone limit; the Blender scene is not modified.
+   The manifest's `canonical_body_layer` takes priority over the saved scene
+   default. `--canonical-layer` overrides it explicitly. A requested layer must
+   exist; the exporter stops instead of silently falling back to another rig.
 3. `gmod/generate_qc.py` creates a QC with the base, head, and individual
    bodygroups. Outfit entries start blank so they can be enabled independently.
    Pass `--outfit-visible` for an outfit model that starts fully dressed. The
@@ -284,6 +287,14 @@ and writes a new scene, manifest and source-hash receipt. Use `--manifest`,
 `--head-fbx`, `--head-xa` and a new `--output` directory. The default
 `--source-scale 400` matches these preserved compiled families; verify the
 coordinate relationship before using it on another export.
+
+For Ameri's recovered wings, `blender/rebuild_recovered_wings.py` takes
+`--manifest`, `--wings-fbx` and a new `--output` directory. Export only the two
+original `P_hane` submeshes to that FBX. The tool bakes their evaluated pose and
+restores wing pivots from the posed rig; raw FBX coordinates can place the wings
+above the head. Other mesh positions must remain unchanged. It retains the
+separate wing bodygroups, marks their materials as two-sided, and writes a new
+scene, manifest and source-hash receipt. The default source scale is 400.
 
 XA morphs are assigned by the reference vertex count for each clip. Face and
 face-parts can share the XX frame name `P_face` while occupying different FBX
