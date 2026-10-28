@@ -253,6 +253,23 @@ python gmod/generate_qc.py --manifest C:\work\Kud_manifest.json --export C:\work
 python gmod/build_gmod.py --manifest C:\work\Kud_manifest.json --qc C:\work\Kud_export\Kud.qc --gmod F:\SteamLibrary\steamapps\common\GarrysMod --vtfcmd C:\tools\VTFCmd.exe --textures C:\exports\Kud --textures C:\exports\Kud\head_textures --addon C:\work\characolle_kud --package C:\work\characolle_kud.gma
 ```
 
+For a local installation of approved builds, `gmod/install_verified_addons.py`
+can combine packages into a folder addon. Its inventory contains `main` and
+`previews` arrays; each entry has a `model` path, `package` filename, and expected
+`sha256`. Package hashes are checked before extraction, and conflicting shared
+assets are rejected. Keep this inventory and all generated assets outside the
+repository.
+
+```text
+python gmod/install_verified_addons.py --inventory C:\work\approved_builds.json --gmad F:\SteamLibrary\steamapps\common\GarrysMod\bin\gmad.exe --output C:\work\characolle_verified
+```
+
+Copy the resulting `characolle_verified` directory into `garrysmod/addons` and
+restart the game. The folder includes models, materials, and a catalog that
+registers its explicit model lists without relying on individual package
+autorun files. The catalog separates main builds and approved outfit previews
+specified by the inventory; missing model files are excluded.
+
 ### Recovering missing outfit scenes
 
 `gmod/recover_compiled.py` can recover an outfit from a preserved MDL, VVD and
