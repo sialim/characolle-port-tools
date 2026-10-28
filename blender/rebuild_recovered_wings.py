@@ -14,6 +14,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "gmod"))
 from scene_manifest import mesh_entry
 
 
+def match_materials(imported, recovered):
+    if not imported or len(imported) != len(recovered) or any(mat is None for mat in [*imported, *recovered]):
+        raise ValueError("Wing material slots do not match the recovered submesh")
+    if len(imported) == 1:
+        return [recovered[0]]
+    def plain(name):
+        return re.sub(r"\.\d{3}$", "", re.sub(r"^BODY_\d\d__", "", name))
+    names = {plain(mat.name): mat for mat in recovered}
+    if len(names) != len(recovered) or {plain(mat.name) for mat in imported} != set(names):
+        raise ValueError("Cannot match multiple wing materials unambiguously")
+    return [names[plain(mat.name)] for mat in imported]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
@@ -38,8 +51,8 @@ def main():
     if len(groups) != 2:
         raise ValueError("Expected the two original P_hane wing submeshes")
     old_wings = {bpy.data.objects[g["mesh"]["name"]] for g in groups}
-    materials = {re.sub(r"^BODY_\d\d__", "", mat.name): mat
-                 for obj in old_wings for mat in obj.data.materials}
+    old_by_name = {re.sub(r"^\d\d_", "", g["name"]): bpy.data.objects[g["mesh"]["name"]]
+                   for g in groups}
     other = [obj for obj in bpy.data.objects if obj.type == "MESH" and obj not in old_wings]
     bpy.context.view_layer.update()
     graph = bpy.context.evaluated_depsgraph_get()
@@ -53,6 +66,8 @@ def main():
     wings = sorted([obj for obj in imported if obj.type == "MESH"], key=lambda obj: obj.name)
     if {obj.name for obj in wings} != {"P_hane_0", "P_hane_1"}:
         raise ValueError("FBX must contain only the original wing meshes")
+    material_map = {obj: match_materials(obj.data.materials, old_by_name[obj.name.casefold()].data.materials)
+                    for obj in wings}
     source_rigs = [obj for obj in imported if obj.type == "ARMATURE"]
     if len(source_rigs) != 1:
         raise ValueError("Expected one original wing armature")
@@ -101,10 +116,9 @@ def main():
             obj.modifiers.remove(modifier)
         for vertex, point in zip(obj.data.vertices, points[obj]):
             vertex.co = point
-        for index, material in enumerate(obj.data.materials):
-            name = re.sub(r"\.\d{3}$", "", material.name)
-            obj.data.materials[index] = materials[name]
-            materials[name]["characolle_two_sided"] = True
+        for index, material in enumerate(material_map[obj]):
+            obj.data.materials[index] = material
+            material["characolle_two_sided"] = True
         for group in list(obj.vertex_groups):
             if group.name not in used:
                 obj.vertex_groups.remove(group)
