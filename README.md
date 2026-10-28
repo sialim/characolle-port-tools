@@ -308,6 +308,23 @@ combinations, eye-bone posing, flex names, and texture coverage. The generated
 addon contains only build output; source game packages and extracted assets stay
 outside the repository.
 
+`gmod/lua/inspect_model.lua` provides a read-only client-side snapshot of a loaded
+entity's materials, bodygroups, flex weights, eye bones and `eyes` attachment.
+Copy it to `garrysmod/lua/characolle_inspect_model.lua`, then use it from a client
+Lua script while looking at the model:
+
+```lua
+local inspect = include('characolle_inspect_model.lua')
+local report = inspect(LocalPlayer():GetEyeTrace().Entity)
+print(util.TableToJSON(report, true))
+```
+
+Eye positions use evaluated bone matrices. The report also records the position
+getter separately because some loaded rigs return the entity origin from it.
+The eye-center error should be near zero with neutral eye offsets; posed eyes
+deliberately move away from the fixed attachment. Inspect the rendered result
+alongside the snapshot.
+
 ## First export targets
 
 Start with one outfit per character:
