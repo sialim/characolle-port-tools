@@ -344,6 +344,14 @@ distorting detailed fingerless gloves. Review the per-mesh `unresolved_samples`
 and `protected_vertices` in the export report, then inspect the rendered shape;
 compilation alone does not establish a good fit.
 
+Thin fabric can disappear from its reverse side while attached trim remains
+visible. Compare the same pose with a two-sided material before changing bone
+weights. Set `"two_sided": true` on that material's manifest record to emit
+`$nocull 1`, or set the Blender material custom property `characolle_two_sided`
+before generating the manifest. Check both sides again after the ragdoll falls;
+this fixes missing reverse faces, while stiff cloth and intersections still need
+their own pose or geometry adjustments.
+
 For nearly coincident fabric and skin, a small shell offset can preserve a
 garment's contours better than closest-surface clearance. Set a root-level
 `"outfit_shell_offset": {"meshes": ["exact_outfit_object"], "distance": 0.04}` in
