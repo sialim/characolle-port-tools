@@ -327,6 +327,17 @@ start hidden even with `--outfit-visible`. This preserves separate controls for
 overlapping alternatives, such as Mashiro's brown and white tails, without
 drawing both surfaces by default. Omit the field to use the command-line default.
 
+Outfits can also contain skin that duplicates the chosen shared body. Keep those
+pieces in optional groups that start hidden while retaining the shared body and
+clothing. If a skin piece shares a bundled group with clothing, move it into an
+appended group so existing group indices stay stable.
+
+Use material-isolation views in game to distinguish duplicate skin from the
+shared body clipping through a garment. Clearance can improve a sleeve while
+distorting detailed fingerless gloves. Review the per-mesh `unresolved_samples`
+and `protected_vertices` in the export report, then inspect the rendered shape;
+compilation alone does not establish a good fit.
+
 `gmod/lua/inspect_model.lua` provides a read-only client-side snapshot of a loaded
 entity's materials, bodygroups, flex weights, eye bones and `eyes` attachment.
 Copy it to `garrysmod/lua/characolle_inspect_model.lua`, then use it from a client
