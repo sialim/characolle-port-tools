@@ -39,7 +39,6 @@ return function(entity, options, completed)
         local ok, message = xpcall(function()
             assert(IsValid(entity), 'Model entity was removed before rendering')
             entity:SetNoDraw(false)
-            entity:InvalidateBoneCache()
             entity:SetupBones()
             if inspect then result.inspection = inspect(entity) end
             render.PushRenderTarget(target)
