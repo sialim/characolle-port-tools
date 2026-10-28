@@ -7,6 +7,7 @@ import json
 import math
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import bpy
@@ -505,6 +506,52 @@ def normalize_export_transforms(manifest: dict, target_height: float) -> dict:
             "normalized_meshes": len(objects), "maximum_geometry_error": maximum_error}
 
 
+def apply_outfit_shell_offset(manifest: dict) -> dict:
+    settings = manifest.get("outfit_shell_offset")
+    if not settings:
+        return {}
+    distance = float(settings["distance"])
+    if not math.isfinite(distance) or not 0 < distance <= .25:
+        raise ValueError("Garment shell distance must be within (0, .25] Source units")
+    available = {entry["name"] for group in manifest.get("bodygroups", [])
+                 for entry in (group.get("meshes") or [group["mesh"]])}
+    names = list(dict.fromkeys(settings["meshes"]))
+    if set(names) - available:
+        raise ValueError("Shell offsets can only use selected outfit meshes")
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    report = {}
+    for name in names:
+        obj = bpy.data.objects[name]
+        obj.data.update()
+        evaluated = obj.evaluated_get(graph)
+        original = [vertex.co.copy() for vertex in obj.data.vertices]
+        if (len(evaluated.data.vertices) != len(original)
+                or any((evaluated.matrix_world @ evaluated.data.vertices[i].co -
+                        obj.matrix_world @ point).length > .0001
+                       for i, point in enumerate(original))):
+            raise ValueError(f"Shell offsets require an unposed outfit with unchanged topology: {name}")
+        normals = defaultdict(lambda: Vector((0, 0, 0)))
+        for vertex in obj.data.vertices:
+            normals[tuple(round(value, 6) for value in vertex.co)] += vertex.normal
+        inverse = obj.matrix_world.inverted().to_3x3()
+        normal_matrix = obj.matrix_world.to_3x3().inverted().transposed()
+        changes = [inverse @ ((normal_matrix @ normals[tuple(round(value, 6) for value in point)])
+                              .normalized() * distance) for point in original]
+        coordinates = ([key.data for key in obj.data.shape_keys.key_blocks]
+                       if obj.data.shape_keys else [obj.data.vertices])
+        for data in coordinates:
+            for vertex, delta in zip(data, changes):
+                vertex.co += delta
+        obj.data.update()
+        report[name] = {"vertices": len(original),
+                        "moved_vertices": sum(delta.length > .00001 for delta in changes),
+                        "maximum_correction": max((obj.matrix_world.to_3x3() @ delta).length
+                                                  for delta in changes) if changes else 0}
+    bpy.context.view_layer.update()
+    return {"distance": distance, "meshes": report}
+
+
 def clearance_pass(manifest: dict, settings: dict) -> dict:
     distance = float(settings["distance"])
     maximum = float(settings["max_correction"])
@@ -902,10 +949,11 @@ def main() -> None:
     staging["renamed_shape_keys"] = clean_shape_names()
     if args.target_height is not None:
         staging["coordinate_normalization"] = normalize_export_transforms(manifest, args.target_height)
-    elif manifest.get("outfit_clearance"):
-        raise ValueError("Outfit clearance requires normalized Source units")
+    elif manifest.get("outfit_clearance") or manifest.get("outfit_shell_offset"):
+        raise ValueError("Outfit adjustments require normalized Source units")
+    staging["outfit_shell_offset"] = apply_outfit_shell_offset(manifest)
     staging["outfit_clearance"] = apply_outfit_clearance(manifest)
-    if staging["outfit_clearance"]:
+    if staging["outfit_clearance"] or staging["outfit_shell_offset"]:
         staging["post_clearance_pruned_vertices"] = prune_weights(args.max_influences)
         staging["post_clearance_normalization"] = normalize_export_transforms(manifest, args.target_height)
     args.output.mkdir(parents=True, exist_ok=True)

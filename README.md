@@ -344,6 +344,15 @@ distorting detailed fingerless gloves. Review the per-mesh `unresolved_samples`
 and `protected_vertices` in the export report, then inspect the rendered shape;
 compilation alone does not establish a good fit.
 
+For nearly coincident fabric and skin, a small shell offset can preserve a
+garment's contours better than closest-surface clearance. Set a root-level
+`"outfit_shell_offset": {"meshes": ["exact_outfit_object"], "distance": 0.04}` in
+the manifest. Distances use normalized Source units and must be within `(0, .25]`.
+The exporter averages normals at coincident garment vertices to keep seams
+together, preserves relative shape keys, and records moved vertices and maximum
+correction. Inspect both sides and bent poses; this does not resolve deep
+intersections or correct reversed garment normals.
+
 For boots whose feet already fit, a clearance pass can set `"height_fade": [6, 9]`
 in its manifest settings. Corrections stay zero below the first Source height and
 fade smoothly to full strength at the second. Apply the same fade to associated
