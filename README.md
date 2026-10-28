@@ -274,6 +274,13 @@ The export stage also avoids mesh/bone name collisions and attaches detached
 weighted head roots to `o01_J_Head`, retaining the fitted rest geometry. Damaged
 geometry already present in an old compiled model still needs source repair.
 
+Pass the matching original head XA to `gmod/generate_qc.py --morph-source` to
+restore linked meshes from the source expression slots. This includes the
+`mayuge` mesh used for both eyebrows and eyelashes on Key heads. Its closed-eye
+target must follow the face target; moving only the eyelid can hide the lashes.
+The generated rules retain the separate mesh controls for manual adjustments.
+Mismatched slot times and conflicting links stop generation.
+
 Recovered scenes retain compiled coordinates until the normal export stage
 normalizes them to 61.2 units. Build a new clothed preview path and inspect it in
 game before replacing any working package. Recovery and compilation alone do

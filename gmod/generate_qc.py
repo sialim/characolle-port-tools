@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--material-path", required=True)
     parser.add_argument("--model-name")
+    parser.add_argument("--morph-source", type=Path, help="Matching head XA for linked face-part and eyelash expression slots")
     parser.add_argument("--surfaceprop", default="flesh")
     parser.add_argument("--scale", type=float)
     parser.add_argument("--outfit-visible", action="store_true", help="Show clothing bodygroups by default")
@@ -84,6 +85,9 @@ def main() -> None:
         alias_path = args.export / "flex_aliases.json"
         if alias_path.is_file():
             links.update(json.loads(alias_path.read_text(encoding="utf-8")))
+        if args.morph_source:
+            from recover_flex_aliases import aliases_from_xa
+            links.update(aliases_from_xa(args.morph_source, flexes))
         for flex in flexes:
             control = flex
             if flex.startswith("PupilSmall") and "PupilSmall" in flexes:

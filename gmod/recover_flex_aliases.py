@@ -1,4 +1,4 @@
-"""Restore face-part links using matching expression slots in the original XA."""
+"""Restore linked facial meshes using matching expression slots in the XA."""
 
 import re
 import sys
@@ -9,13 +9,19 @@ def aliases_from_xa(path: Path, flexes: list[str]) -> dict[str, str]:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
     from xa_morph_extract import parse_xa
 
+    return aliases_from_clips(parse_xa(path.read_bytes())[1]['clips'], flexes)
+
+
+def aliases_from_clips(clips: list[dict], flexes: list[str]) -> dict[str, str]:
+
     def clean(value):
         return ''.join(p[:1].upper() + p[1:] for p in re.findall(r'[A-Za-z0-9]+', value)).casefold()
 
     names = {name.casefold(): name for name in flexes}
-    clips = {c['name']: c for c in parse_xa(path.read_bytes())[1]['clips']}
+    clips = {c['name']: c for c in clips}
     result = {}
-    for target_clip, source_clip in [('Parts_top', 'Face_top'), ('Parts_bottom', 'Face_bottom')]:
+    for target_clip, source_clip in [('Parts_top', 'Face_top'), ('Parts_bottom', 'Face_bottom'),
+                                     ('mayuge', 'Face_top')]:
         if target_clip not in clips or source_clip not in clips:
             continue
         target, source = clips[target_clip]['keyframes'], clips[source_clip]['keyframes']
@@ -23,6 +29,8 @@ def aliases_from_xa(path: Path, flexes: list[str]) -> dict[str, str]:
             raise ValueError('Face and parts expression slots have different lengths')
         candidates = {}
         for t, s in zip(target, source):
+            if t['index'] != s['index']:
+                raise ValueError('Face and linked mesh expression times differ')
             if clean(t['name']) in names and clean(s['name']) in names:
                 candidates.setdefault(names[clean(t['name'])], set()).add(names[clean(s['name'])])
         for target, sources in candidates.items():
