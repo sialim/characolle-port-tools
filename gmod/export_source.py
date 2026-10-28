@@ -495,6 +495,13 @@ def clearance_pass(manifest: dict, settings: dict) -> dict:
     if (not 0 < distance <= 0.5 or not distance <= maximum <= 2
             or not 0 <= iterations <= 16 or subdivisions not in (0, 1)):
         raise ValueError("Invalid garment distance, correction limit or sampling iterations")
+    height_fade = settings.get("height_fade")
+    if height_fade is not None:
+        if (not isinstance(height_fade, (list, tuple)) or len(height_fade) != 2
+                or not all(isinstance(value, (int, float)) and math.isfinite(value)
+                           for value in height_fade)
+                or height_fade[0] >= height_fade[1]):
+            raise ValueError("Clearance height_fade requires two increasing finite Source heights")
     entries = [mesh for group in manifest.get("bodygroups", [])
                for mesh in (group.get("meshes") or [group["mesh"]])]
     available = {entry["name"] for entry in entries}
@@ -637,6 +644,15 @@ def clearance_pass(manifest: dict, settings: dict) -> dict:
             if not move(proposals):
                 break
             move({index: contact(point)[0] for index, point in enumerate(points)})
+        faded = 0
+        if height_fade is not None:
+            for index, point in enumerate(original):
+                weight = max(0.0, min(1.0, (point.z - height_fade[0]) /
+                                     (height_fade[1] - height_fade[0])))
+                weight = weight * weight * (3 - 2 * weight)
+                if weight < 1 and (points[index] - point).length > 0.00001:
+                    faded += 1
+                    points[index] = point + (points[index] - point) * weight
         unresolved = 0
         if iterations:
             for indices, normal in face_samples():
@@ -656,10 +672,11 @@ def clearance_pass(manifest: dict, settings: dict) -> dict:
                         "maximum_correction": max(((points[i] - original[i]).length for i in changes), default=0),
                         "face_iterations": completed, "unresolved_samples": unresolved,
                         "vertices_before": vertex_counts[name], "vertices_after": len(basis),
+                        "height_faded_vertices": faded,
                         "protected_vertices": len(protected)}
     bpy.context.view_layer.update()
     return {"distance": distance, "max_correction": maximum,
-            "reference_meshes": references, "meshes": report}
+            "reference_meshes": references, "height_fade": height_fade, "meshes": report}
 
 
 def apply_outfit_clearance(manifest: dict) -> dict:

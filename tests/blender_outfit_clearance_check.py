@@ -125,5 +125,32 @@ manifest["outfit_clearance"]["max_correction"] = .1
 report = exporter.apply_outfit_clearance(manifest)
 assert report["meshes"]["shirt"]["limited_vertices"] == 4
 assert all(abs(vertex.co.x - .88) < 1e-5 for vertex in basis.data)
+
+mesh = bpy.data.meshes.new("boot")
+mesh.from_pydata([(.98, y, z) for z in (-.2, 0, .2) for y in (-.2, .2)],
+                 [], [(0, 1, 3, 2), (2, 3, 5, 4)])
+boot = bpy.data.objects.new("boot", mesh)
+bpy.context.collection.objects.link(boot)
+boot_basis = boot.shape_key_add(name="Basis")
+boot_fold = boot.shape_key_add(name="Fold")
+boot_fold.data[0].co.z += .02
+boot_fold.value = 0
+faded = {"base_objects": [{"name": "body"}], "bodygroups": [{"mesh": {"name": "boot"}}],
+         "outfit_clearance": {"meshes": ["boot"], "distance": .06, "max_correction": .5,
+                              "height_fade": [-.2, .2]}}
+report = exporter.apply_outfit_clearance(faded)
+for index, expected in enumerate((.98, .98, 1.02, 1.02, 1.06, 1.06)):
+    assert abs(boot_basis.data[index].co.x - expected) < 1e-5
+assert report["meshes"]["boot"]["height_faded_vertices"] == 4
+assert abs((boot_fold.data[0].co - boot_basis.data[0].co).z - .02) < 1e-5
+assert all((vertex.co - point).length == 0 for vertex, point in zip(body.data.vertices, original))
+for invalid in ([1, 1], [2, 1], [0, float("nan")], [0], "0,1"):
+    faded["outfit_clearance"]["height_fade"] = invalid
+    try:
+        exporter.apply_outfit_clearance(faded)
+    except ValueError as error:
+        assert "height_fade" in str(error)
+    else:
+        raise AssertionError(f"Invalid clearance height fade was accepted: {invalid}")
 print("PASS: bounded garment and layer clearance, face samples, shape keys and unchanged shared body")
 

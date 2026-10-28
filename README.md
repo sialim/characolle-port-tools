@@ -338,6 +338,13 @@ distorting detailed fingerless gloves. Review the per-mesh `unresolved_samples`
 and `protected_vertices` in the export report, then inspect the rendered shape;
 compilation alone does not establish a good fit.
 
+For boots whose feet already fit, a clearance pass can set `"height_fade": [6, 9]`
+in its manifest settings. Corrections stay zero below the first Source height and
+fade smoothly to full strength at the second. Apply the same fade to associated
+trim layers. The report records `height_faded_vertices` and counts unresolved
+samples after fading; inspect the transition and any intentionally uncorrected
+areas. Original scenes and relative shape keys remain unchanged.
+
 `gmod/lua/inspect_model.lua` provides a read-only client-side snapshot of a loaded
 entity's materials, bodygroups, flex weights, eye bones and `eyes` attachment.
 Copy it to `garrysmod/lua/characolle_inspect_model.lua`, then use it from a client
