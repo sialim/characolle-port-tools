@@ -13,11 +13,13 @@ from bundle_manifest import bundle
 
 
 class QcGenerationTests(unittest.TestCase):
-    def generate(self, count, *extra, flexes=None, attachments=None):
+    def generate(self, count, *extra, flexes=None, attachments=None, defaults=None):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         groups = [{"name": f"piece_{i}"} for i in range(count)]
+        for group, visible in zip(groups, defaults or []):
+            group["default_visible"] = visible
         (root / "manifest.json").write_text(json.dumps({"character": "Fixture", "bodygroups": groups}))
         if flexes is not None:
             (root / "flexes.json").write_text(json.dumps(flexes))
@@ -47,6 +49,23 @@ class QcGenerationTests(unittest.TestCase):
         entries = material_entries(manifest)
         self.assertEqual(set(entries), {"body_02__skin", "body_00__skin"})
         self.assertNotEqual(entries["body_02__skin"]["images"], entries["body_00__skin"]["images"])
+
+    def test_alternative_can_start_hidden_in_clothed_build(self):
+        result, qc = self.generate(2, "--outfit-visible", defaults=[True, False])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('studio "bg_piece_0.dmx"\n    blank', qc.read_text())
+        self.assertIn('blank\n    studio "bg_piece_1.dmx"', qc.read_text())
+
+    def test_explicit_visibility_overrides_hidden_global_default(self):
+        result, qc = self.generate(1, defaults=[True])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('studio "bg_piece_0.dmx"\n    blank', qc.read_text())
+
+    def test_invalid_visibility_does_not_silently_enable_a_variant(self):
+        result, qc = self.generate(1, "--outfit-visible", defaults=["false"])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('must be a boolean', result.stderr)
+        self.assertFalse(qc.exists())
 
     def test_head_compiles_facial_rules_and_linked_lashes(self):
         result, qc = self.generate(1, flexes=["MeBaseToji", "NamidaBacetoji", "KuchiAkiA"])

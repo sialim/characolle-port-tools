@@ -101,7 +101,10 @@ def main() -> None:
         filename = f"bg_{safe_name(entry['name'])}.dmx"
         require_export(args.export, filename)
         group_name = safe_name(entry["name"])
-        alternatives = [f'    studio "{filename}"', "    blank"] if args.outfit_visible else ["    blank", f'    studio "{filename}"']
+        visible = entry.get("default_visible", args.outfit_visible)
+        if not isinstance(visible, bool):
+            raise ValueError(f"Bodygroup {group_name} default_visible must be a boolean")
+        alternatives = [f'    studio "{filename}"', "    blank"] if visible else ["    blank", f'    studio "{filename}"']
         lines.extend([
             f'$bodygroup "{group_name}"',
             "{",

@@ -308,6 +308,11 @@ combinations, eye-bone posing, flex names, and texture coverage. The generated
 addon contains only build output; source game packages and extracted assets stay
 outside the repository.
 
+An individual bodygroup can set `"default_visible": false` in its manifest to
+start hidden even with `--outfit-visible`. This preserves separate controls for
+overlapping alternatives, such as Mashiro's brown and white tails, without
+drawing both surfaces by default. Omit the field to use the command-line default.
+
 `gmod/lua/inspect_model.lua` provides a read-only client-side snapshot of a loaded
 entity's materials, bodygroups, flex weights, eye bones and `eyes` attachment.
 Copy it to `garrysmod/lua/characolle_inspect_model.lua`, then use it from a client
