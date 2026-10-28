@@ -333,6 +333,18 @@ start hidden even with `--outfit-visible`. This preserves separate controls for
 overlapping alternatives, such as Mashiro's brown and white tails, without
 drawing both surfaces by default. Omit the field to use the command-line default.
 
+Mashiro's two clothed outfit builds retain six manual tail controls,
+`o01_J_sippo_01` through `o01_J_sippo_06`. The first control attaches to
+`o01_J_Kosi02`; the remaining controls form a chain. Rotate the first control to
+swing the whole tail, or later controls to bend its tip. Check the rendered skin
+and reset the angles afterward; the tail root, hips and head should stay in place.
+Tail physics requires a separate setup.
+
+With brown tail A exported first and white tail B set to `default_visible: false`,
+bodygroup values A=0/B=0 show brown and A=1/B=1 show white. The group names start
+with `00_p_sippo_` or `01_p_sippo_`, depending on the outfit. Keep one variant
+visible at a time to avoid coincident surfaces flickering.
+
 Outfits can also contain skin that duplicates the chosen shared body. Keep those
 pieces in optional groups that start hidden while retaining the shared body and
 clothing. If a skin piece shares a bundled group with clothing, move it into an
