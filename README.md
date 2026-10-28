@@ -156,6 +156,12 @@ repeatable Source export:
    normalized exports; an additional `$scale 400` would multiply the height again.
    Mantle cloth bones are reduced to a torso-bound export representation because
    Source models have a 256-bone limit; the Blender scene is not modified.
+   To retain cape pose controls, set a root-level `mantle_keep_bones` list in the
+   manifest with the exact source bone names. Removed cape weights merge into
+   the nearest retained ancestor, or the torso when none survives. Retained
+   bones keep their rest transforms and attach through the surviving chain.
+   Choose a reduced set that keeps the export skeleton within 256 bones.
+   This preserves manual posing controls; it does not add cloth simulation.
    The manifest's `canonical_body_layer` takes priority over the saved scene
    default. `--canonical-layer` overrides it explicitly. A requested layer must
    exist; the exporter stops instead of silently falling back to another rig.

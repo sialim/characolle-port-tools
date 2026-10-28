@@ -325,38 +325,56 @@ def clean_shape_names() -> int:
     return changed
 
 
-def simplify_mantle_bones() -> dict:
+def simplify_mantle_bones(keep_bones: list[str] | None = None) -> dict:
     """Keep the cape attached to the torso without exceeding Source's bone limit."""
+    if keep_bones is not None and (not isinstance(keep_bones, list)
+                                   or any(not isinstance(name, str) for name in keep_bones)):
+        raise ValueError("mantle_keep_bones must be a list of bone names")
     canonical = bpy.data.objects.get(bpy.context.scene.get("characolle_shared_body_rig", ""))
     if canonical is None:
         return {"removed_mantle_bones": 0, "simplified_mantle_meshes": 0}
     bones = {bone.name for bone in canonical.data.bones}
     mantle_names = {name for name in bones if "mant" in name.casefold()}
+    keep = set(keep_bones or [])
+    if keep - mantle_names:
+        raise ValueError(f"Unknown retained mantle bones: {sorted(keep - mantle_names)}")
+    removed = mantle_names - keep
+    if keep and len(bones) - len(removed) > 256:
+        raise ValueError("Retained mantle bones exceed the 256-bone export budget")
     if not mantle_names:
         return {"removed_mantle_bones": 0, "simplified_mantle_meshes": 0}
     fallback = next((name for name in ("o01_J_Spin04", "o01_J_Spin03", "o01_J_Spin01") if name in bones), None)
     if fallback is None:
         raise RuntimeError("Could not find a torso fallback bone for the mantle export")
 
+    replacements = {}
+    for name in removed:
+        parent = canonical.data.bones[name].parent
+        while parent is not None and parent.name in removed:
+            parent = parent.parent
+        replacements[name] = parent.name if parent is not None and parent.name in keep else fallback
     simplified = 0
     for obj in bpy.data.objects:
         if obj.type != "MESH":
             continue
-        mantle_groups = [group for group in obj.vertex_groups if group.name in mantle_names]
+        mantle_groups = [group for group in obj.vertex_groups if group.name in removed]
         if not mantle_groups:
             continue
-        fallback_group = obj.vertex_groups.get(fallback) or obj.vertex_groups.new(name=fallback)
-        mantle_indices = {group.index for group in mantle_groups}
+        targets = {group.index: replacements[group.name] for group in mantle_groups}
+        target_groups = {name: obj.vertex_groups.get(name) or obj.vertex_groups.new(name=name)
+                         for name in set(targets.values())}
+        target_indices = {group.index: name for name, group in target_groups.items()}
         for vertex in obj.data.vertices:
-            mantle_weight = 0.0
-            fallback_weight = 0.0
+            weights = {}
+            changed = False
             for link in vertex.groups:
-                if link.group in mantle_indices:
-                    mantle_weight += link.weight
-                elif link.group == fallback_group.index:
-                    fallback_weight = link.weight
-            if mantle_weight:
-                fallback_group.add([vertex.index], fallback_weight + mantle_weight, "REPLACE")
+                name = targets.get(link.group) or target_indices.get(link.group)
+                if name is not None:
+                    weights[name] = weights.get(name, 0.0) + link.weight
+                    changed |= link.group in targets
+            if changed:
+                for name, weight in weights.items():
+                    target_groups[name].add([vertex.index], weight, "REPLACE")
         for group in mantle_groups:
             obj.vertex_groups.remove(group)
         simplified += 1
@@ -368,7 +386,6 @@ def simplify_mantle_bones() -> dict:
     bpy.context.view_layer.objects.active = canonical
     bpy.ops.object.mode_set(mode="EDIT")
     edit_bones = canonical.data.edit_bones
-    removed = set(mantle_names)
     for edit_bone in list(edit_bones):
         if edit_bone.name not in removed:
             continue
@@ -384,7 +401,8 @@ def simplify_mantle_bones() -> dict:
         if edit_bone is not None:
             edit_bones.remove(edit_bone)
     bpy.ops.object.mode_set(mode="OBJECT")
-    return {"removed_mantle_bones": len(removed), "simplified_mantle_meshes": simplified, "mantle_fallback": fallback}
+    return {"removed_mantle_bones": len(removed), "simplified_mantle_meshes": simplified,
+            "mantle_fallback": fallback, "retained_mantle_bones": sorted(keep)}
 
 
 def temporary_collection(name: str, objects: list[bpy.types.Object]) -> bpy.types.Collection:
@@ -879,7 +897,7 @@ def main() -> None:
     staging["recovered_head_roots_attached"] = attach_recovered_head(manifest)
     staging["eye_controls_added"] = eye_controls_added
     if not args.keep_mantle_bones:
-        staging.update(simplify_mantle_bones())
+        staging.update(simplify_mantle_bones(manifest.get("mantle_keep_bones")))
     staging["pruned_vertices"] = prune_weights(args.max_influences)
     staging["renamed_shape_keys"] = clean_shape_names()
     if args.target_height is not None:
