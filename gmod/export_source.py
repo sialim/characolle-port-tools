@@ -223,6 +223,50 @@ def attach_recovered_head(manifest: dict) -> list[str]:
     return sorted(roots)
 
 
+def restore_weighted_deformers(manifest: dict, armature: bpy.types.Object) -> list[dict]:
+    entries = list(manifest.get("base_objects", []))
+    entries.extend(mesh for entry in manifest.get("bodygroups", [])
+                   for mesh in (entry.get("meshes") or [entry["mesh"]]))
+    restored = []
+    bone_names = set(armature.data.bones.keys())
+    for name in dict.fromkeys(entry["name"] for entry in entries):
+        obj = bpy.data.objects[name]
+        if obj.type != "MESH" or any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
+            continue
+        used = [{obj.vertex_groups[link.group].name for link in vertex.groups
+                 if link.weight > 0 and obj.vertex_groups[link.group].name in bone_names}
+                for vertex in obj.data.vertices]
+        weighted_bones = set().union(*used) if used else set()
+        if not weighted_bones:
+            continue
+        if obj.parent == armature and obj.parent_type == "BONE" and weighted_bones == {obj.parent_bone}:
+            continue
+        if any(not bones for bones in used):
+            raise ValueError(f"Cannot restore partial skin weights on {obj.name}")
+        graph = bpy.context.evaluated_depsgraph_get()
+        evaluated = obj.evaluated_get(graph)
+        before = [evaluated.matrix_world @ vertex.co for vertex in evaluated.data.vertices]
+        world = obj.matrix_world.copy()
+        obj.parent = armature
+        obj.parent_type = "OBJECT"
+        obj.parent_bone = ""
+        obj.matrix_world = world
+        modifier = obj.modifiers.new(name="CHARACOLLE_EXPORT_SKIN", type="ARMATURE")
+        modifier.object = armature
+        bpy.context.view_layer.update()
+        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        after = [evaluated.matrix_world @ vertex.co for vertex in evaluated.data.vertices]
+        if len(before) != len(after):
+            raise ValueError(f"Restoring skin changes vertex count on {obj.name}")
+        error = max(((a - b).length for a, b in zip(before, after)), default=0.0)
+        extent = max((max(v[i] for v in before) - min(v[i] for v in before) for i in range(3)), default=0.0)
+        if error > max(extent * 0.0001, 1e-7):
+            raise ValueError(f"Restoring skin changes fitted geometry on {obj.name}: {error:g}")
+        restored.append({"mesh": obj.name, "bones": sorted(weighted_bones),
+                         "maximum_geometry_error": error})
+    return restored
+
+
 def prune_weights(max_influences: int) -> int:
     changed = 0
     for obj in bpy.data.objects:
@@ -814,6 +858,7 @@ def main() -> None:
     if canonical_layer is not None and canonical_layer not in {"00", "01", "02", "03", "04"}:
         raise ValueError(f"Invalid manifest canonical body layer: {canonical_layer}")
     staging = prepare_single_armature(canonical_layer)
+    staging["restored_weighted_deformers"] = restore_weighted_deformers(manifest, bpy.data.objects[staging["armature"]])
     staging["recovered_head_roots_attached"] = attach_recovered_head(manifest)
     staging["eye_controls_added"] = eye_controls_added
     if not args.keep_mantle_bones:

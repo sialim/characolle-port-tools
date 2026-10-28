@@ -281,6 +281,13 @@ target must follow the face target; moving only the eyelid can hide the lashes.
 The generated rules retain the separate mesh controls for manual adjustments.
 Mismatched slot times and conflicting links stop generation.
 
+Export also restores missing armature modifiers on weighted body and outfit
+submeshes. A mesh parented to the root bone can otherwise export as a rigid part
+despite retaining fingertip or other skin weights, causing it to drift during
+ragdoll poses. Restoration preserves the fitted geometry and leaves intentional
+rigid attachments and head eye-bone parenting intact. Partial weights or a change
+to fitted geometry stop the export for inspection.
+
 Recovered scenes retain compiled coordinates until the normal export stage
 normalizes them to 61.2 units. Build a new clothed preview path and inspect it in
 game before replacing any working package. Recovery and compilation alone do
